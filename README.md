@@ -6,13 +6,13 @@ Scope: personal setup only (`~/.claude`). Project-level config lives in each rep
 
 ## Repo contents
 
-| File                    | Target                            | Purpose                                                |
-| ----------------------- | --------------------------------- | ------------------------------------------------------ |
-| `setup.sh`              | —                                 | Installer: applies everything below to the profile     |
-| `settings.json`         | `~/.claude/settings.json`         | Core settings: model, hooks, status line, plugins (deep-merged, not overwritten) |
-| `statusline-command.sh` | `~/.claude/statusline-command.sh` | Status line script (what it does is documented inside) |
-| `CLAUDE.md`             | `~/.claude/CLAUDE.md`             | Global memory / behavior rules                         |
-| `keybindings.json`      | `~/.claude/keybindings.json`      | `shift+enter` → newline                                |
+| File                    | Target                            | Purpose                                                                           |
+| ----------------------- | --------------------------------- | --------------------------------------------------------------------------------- |
+| `setup.sh`              | —                                 | Installer: applies everything below to the profile                                |
+| `settings.json`         | `~/.claude/settings.json`         | Core settings: model, hooks, status line, plugins (deep-merged, not overwritten)  |
+| `statusline-command.sh` | `~/.claude/statusline-command.sh` | 4-line status line: identity · session usage · rate limits · cwd (details inside) |
+| `CLAUDE.md`             | `~/.claude/CLAUDE.md`             | Global memory / behavior rules                                                    |
+| `keybindings.json`      | `~/.claude/keybindings.json`      | `shift+enter` → newline                                                           |
 
 All paths inside `settings.json` use `~` / `$HOME`, so the files are portable as-is — no path editing needed.
 
@@ -84,16 +84,16 @@ Then verify with `/plugin`. If anything is missing, install manually:
 /plugin install codex@openai-codex
 ```
 
-| Plugin            | Marketplace             | Purpose                                          |
-| ----------------- | ----------------------- | ------------------------------------------------ |
-| `context7`        | claude-plugins-official | Live library/framework docs lookup               |
-| `serena`          | claude-plugins-official | LSP-based symbol-level code navigation/editing   |
-| `superpowers`     | claude-plugins-official | Extended skill collection                        |
-| `gopls-lsp`       | claude-plugins-official | Go language server integration                   |
-| `skill-creator`   | claude-plugins-official | Authoring new skills                             |
-| `frontend-design` | claude-plugins-official | Frontend/UI design assistance                    |
+| Plugin            | Marketplace             | Purpose                                                                         |
+| ----------------- | ----------------------- | ------------------------------------------------------------------------------- |
+| `context7`        | claude-plugins-official | Live library/framework docs lookup                                              |
+| `serena`          | claude-plugins-official | LSP-based symbol-level code navigation/editing                                  |
+| `superpowers`     | claude-plugins-official | Extended skill collection                                                       |
+| `gopls-lsp`       | claude-plugins-official | Go language server integration                                                  |
+| `skill-creator`   | claude-plugins-official | Authoring new skills                                                            |
+| `frontend-design` | claude-plugins-official | Frontend/UI design assistance                                                   |
 | `context-mode`    | mksglu/context-mode     | Context-window protection: sandboxed exec + FTS5 knowledge base (`ctx_*` tools) |
-| `codex`           | openai/codex-plugin-cc  | OpenAI Codex integration                         |
+| `codex`           | openai/codex-plugin-cc  | OpenAI Codex integration                                                        |
 
 ### 5. Install personal skills
 
@@ -117,11 +117,11 @@ From `microsoft/playwright-cli` (1): `playwright-cli`.
 
 ### 6. Verify
 
-1. [ ] Status line renders at the bottom: `model  dir  git-branch`
-1. [ ] `/plugin` shows all 8 plugins enabled
-1. [ ] context-mode auto-deployed its hook: `~/.claude/hooks/context-mode-cache-heal.mjs` exists and `settings.json` gained a `SessionStart` entry
-1. [ ] Ask Claude to write a test `.md` file — the mdformat hook should reformat it
-1. [ ] `shift+enter` inserts a newline in the chat input
+1. [ ] Status line renders 4 lines at the bottom: identity (`model · branch · account`) / session (`ctx% · cost · ±lines · effort`) / account (`5h & 7d limits · vim · version`) / full cwd path
+2. [ ] `/plugin` shows all 8 plugins enabled
+3. [ ] context-mode auto-deployed its hook: `~/.claude/hooks/context-mode-cache-heal.mjs` exists and `settings.json` gained a `SessionStart` entry
+4. [ ] Ask Claude to write a test `.md` file — the mdformat hook should reformat it
+5. [ ] `shift+enter` inserts a newline in the chat input
 
 ______________________________________________________________________
 
@@ -141,9 +141,8 @@ ______________________________________________________________________
 ### Hooks
 
 1. **PostToolUse (Write|Edit|MultiEdit) → mdformat** — declared in `settings.json`. Auto-formats any `.md`/`.markdown` file Claude writes, using `mdformat --wrap=keep --number`. Fails silently (`|| true`) so a missing binary never blocks edits.
-1. **SessionStart → `context-mode-cache-heal.mjs`** — auto-deployed by the context-mode plugin on install: it places the script under `~/.claude/hooks/` and adds the `SessionStart` entry to `settings.json` itself. Intentionally not part of the repo's `settings.json` — do not hand-copy or pre-configure it.
+2. **SessionStart → `context-mode-cache-heal.mjs`** — auto-deployed by the context-mode plugin on install: it places the script under `~/.claude/hooks/` and adds the `SessionStart` entry to `settings.json` itself. Intentionally not part of the repo's `settings.json` — do not hand-copy or pre-configure it.
 
 ### Global memory (`CLAUDE.md`)
 
 Behavior rules applied in every session: extreme concision in replies and commit messages, "analyze means analyze only" (no edits/commits on analysis requests), and unresolved-questions list at the end of every plan.
-

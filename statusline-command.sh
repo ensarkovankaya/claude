@@ -8,22 +8,55 @@
 #   It is wired up by the "statusLine" block in ~/.claude/settings.json.
 #
 # WHAT IT DOES
-#   On every refresh, Claude Code pipes a JSON payload (model, cwd, ...)
-#   to this script's stdin. The script prints a single line:
-#     <model name>  <current dir basename>  <git branch>
-#   Colors: dim cyan / dim yellow / dim magenta. The branch segment is
-#   omitted when the cwd is not inside a git repository; on a detached
-#   HEAD it falls back to the short commit SHA.
+#   On every refresh, Claude Code pipes a JSON payload to this script's
+#   stdin. The script prints FOUR grouped lines, each answering one
+#   question (segments shown only when present; metric lines use dim bars):
+#     line 1  identity:  model · git branch · account
+#     line 2  session:   context% (+200k warn) · cost · +added/-removed
+#                        · effort · think/fast flags
+#     line 3  account:   5h & 7d rate limits (+reset clocks) · vim mode
+#                        · version · (non-default) output style
+#     line 4  location:  full cwd path
+#   Percent segments (context, rate limits) are colored by threshold:
+#   green < 50, yellow < 80, red >= 80. The branch segment is omitted
+#   outside a git repo; on a detached HEAD it falls back to the short SHA.
 #
 # REQUIRES: jq
 
 # Read the full JSON payload Claude Code sends on stdin
 input=$(cat)
 
-# Extract model display name and current working directory from the payload
-model=$(echo "$input" | jq -r '.model.display_name // "Claude"')
-cwd=$(echo "$input" | jq -r '.cwd // ""')
-dir=$(basename "$cwd")
+# Pull every field we care about in a single jq pass (tab-separated so the
+# model name's spaces survive). IFS=tab keeps each column intact.
+IFS=$'\x1f' read -r model cwd ctx_pct cost lines_add lines_rem effort \
+    think fast five_pct seven_pct five_reset seven_reset out_style version vim_mode exceeds \
+    < <(echo "$input" | jq -r '[
+        .model.display_name             // "Claude",
+        .cwd                            // "",
+        ((.context_window.used_percentage // 0) | round),
+        (.cost.total_cost_usd           // 0),
+        (.cost.total_lines_added        // 0),
+        (.cost.total_lines_removed      // 0),
+        (.effort.level                  // ""),
+        (.thinking.enabled              // false),
+        (.fast_mode                     // false),
+        ((.rate_limits.five_hour.used_percentage // 0) | round),
+        ((.rate_limits.seven_day.used_percentage // 0) | round),
+        (.rate_limits.five_hour.resets_at // 0),
+        (.rate_limits.seven_day.resets_at // 0),
+        (.output_style.name             // ""),
+        (.version                       // ""),
+        (.vim.mode                      // ""),
+        (.exceeds_200k_tokens           // false)
+      ] | map(tostring) | join("")')
+
+dir="$cwd"
+
+# Resolve account email from the active config dir's .claude.json.
+# Default account keeps it at ~/.claude.json; CLAUDE_CONFIG_DIR accounts inside the dir.
+acct_file="${CLAUDE_CONFIG_DIR:+$CLAUDE_CONFIG_DIR/.claude.json}"
+acct_file="${acct_file:-$HOME/.claude.json}"
+acct=$(jq -r '.oauthAccount.emailAddress // empty' "$acct_file" 2>/dev/null | cut -d@ -f1)
 
 # Resolve git branch; fall back to short SHA when detached.
 # GIT_OPTIONAL_LOCKS=0 keeps git from writing lock files on a read-only query.
@@ -35,14 +68,74 @@ RESET='\033[0m'
 CYAN='\033[36m'
 YELLOW='\033[33m'
 MAGENTA='\033[35m'
+GREEN='\033[32m'
+RED='\033[31m'
+BLUE='\033[34m'
+GRAY='\033[90m'
 DIM='\033[2m'
 
-# Assemble: model + dir always; branch only when present
-parts="${DIM}${CYAN}${model}${RESET}"
-parts="${parts}  ${DIM}${YELLOW}${dir}${RESET}"
+SEP="${DIM}${GRAY}│${RESET}"
 
-if [ -n "$branch" ]; then
-  parts="${parts}  ${DIM}${MAGENTA}${branch}${RESET}"
+# Pick a color for a percentage: green < 50, yellow < 80, else red.
+pct_color() {
+  local p=$1
+  if   [ "$p" -ge 80 ]; then printf '%b' "$RED"
+  elif [ "$p" -ge 50 ]; then printf '%b' "$YELLOW"
+  else                       printf '%b' "$GREEN"
+  fi
+}
+
+# Render a "→<clock>" reset segment from an epoch ($1) using date format $2.
+# Emits nothing when the epoch is absent (0) or date(1) fails.
+fmt_reset() {
+  [ "$1" = "0" ] && return
+  local clk
+  clk=$(date -r "$1" "+$2" 2>/dev/null) || return
+  [ -n "$clk" ] && printf '%s' "${DIM}${GRAY}→${clk}${RESET}"
+}
+
+# ── Line 1: identity — who & where (space-separated, no bars) ────────
+line1="${DIM}${CYAN}${model}${RESET}"
+[ -n "$branch" ] && line1="${line1}  ${DIM}${MAGENTA}${branch}${RESET}"
+[ -n "$acct" ]   && line1="${line1}  ${DIM}${GREEN}${acct}${RESET}"
+
+# ── Line 2: this session — usage + reasoning mode ────────────────────
+# Context window usage (+ 200k warning badge when exceeded)
+c=$(pct_color "$ctx_pct")
+line2="${DIM}${c}ctx ${ctx_pct}%${RESET}"
+[ "$exceeds" = "true" ] && line2="${line2} ${DIM}${RED}⚠200k+${RESET}"
+
+# Session cost (2 decimals)
+cost_fmt=$(LC_NUMERIC=C printf '%.2f' "$cost")
+line2="${line2}  ${SEP}  ${DIM}${GREEN}\$${cost_fmt}${RESET}"
+
+# Lines changed this session (skip when nothing touched)
+if [ "$lines_add" != "0" ] || [ "$lines_rem" != "0" ]; then
+  line2="${line2}  ${SEP}  ${DIM}${GREEN}+${lines_add}${RESET}${DIM}/${RED}-${lines_rem}${RESET}"
 fi
 
-printf '%b\n' "$parts"
+# Effort + thinking/fast flags
+flags=""
+[ -n "$effort" ]       && flags="${DIM}${BLUE}${effort}${RESET}"
+[ "$think" = "true" ]  && flags="${flags:+$flags }${DIM}${MAGENTA}think${RESET}"
+[ "$fast" = "true" ]   && flags="${flags:+$flags }${DIM}${YELLOW}fast${RESET}"
+[ -n "$flags" ]        && line2="${line2}  ${SEP}  ${flags}"
+
+# ── Line 3: account quota + client/editor state ──────────────────────
+# Rate limits (5-hour & 7-day), each with its reset clock.
+# 5h resets within the day → time only; 7d can be days out → date + time.
+fc=$(pct_color "$five_pct")
+sc=$(pct_color "$seven_pct")
+five_seg="${DIM}${fc}5h ${five_pct}%${RESET}$(fmt_reset "$five_reset" '%H:%M')"
+seven_seg="${DIM}${sc}7d ${seven_pct}%${RESET}$(fmt_reset "$seven_reset" '%m-%d %H:%M')"
+line3="${five_seg}  ${SEP}  ${seven_seg}"
+
+# Vim mode · version · (non-default) output style
+[ -n "$vim_mode" ]                                   && line3="${line3}  ${SEP}  ${DIM}${GRAY}${vim_mode}${RESET}"
+[ -n "$version" ]                                    && line3="${line3}  ${SEP}  ${DIM}${GRAY}v${version}${RESET}"
+[ -n "$out_style" ] && [ "$out_style" != "default" ] && line3="${line3}  ${SEP}  ${DIM}${GRAY}${out_style}${RESET}"
+
+# ── Line 4: full working directory path ──────────────────────────────
+line4="${DIM}${YELLOW}${dir}${RESET}"
+
+printf '%b\n%b\n%b\n%b\n' "$line1" "$line2" "$line3" "$line4"
