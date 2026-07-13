@@ -50,7 +50,17 @@
   "editorMode": "vim",
   "verbose": true,
   "agentPushNotifEnabled": false,
+  "inputNeededNotifEnabled": false,
   "skipAutoPermissionPrompt": true,
+  "skipWorkflowUsageWarning": true,
   "useAutoModeDuringPlan": true,
+  "switchModelsOnFlag": false,
+  "remoteControlAtStartup": false,
+  "autoUpdatesChannel": "stable",
+  "tui": "fullscreen",
+  "language": "türkçe",
+  "worktree": {
+    "baseRef": "fresh"
+  },
   "model": "claude-fable-5[1m]"
 }

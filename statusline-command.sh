@@ -11,11 +11,11 @@
 #   On every refresh, Claude Code pipes a JSON payload to this script's
 #   stdin. The script prints FOUR grouped lines, each answering one
 #   question (segments shown only when present; metric lines use dim bars):
-#     line 1  identity:  model · git branch · account
-#     line 2  session:   context% (+200k warn) · cost · +added/-removed
-#                        · effort · think/fast flags
-#     line 3  account:   5h & 7d rate limits (+reset clocks) · vim mode
-#                        · version · (non-default) output style
+#     line 1  identity:  model · git branch · worktree · account · agent
+#     line 2  session:   context% (+200k warn) · cost · duration
+#                        · +added/-removed · effort · think/fast flags
+#     line 3  account:   5h & 7d rate limits (+reset clocks) · PR (state)
+#                        · vim mode · version · (non-default) output style
 #     line 4  location:  full cwd path
 #   Percent segments (context, rate limits) are colored by threshold:
 #   green < 50, yellow < 80, red >= 80. The branch segment is omitted
@@ -30,6 +30,7 @@ input=$(cat)
 # model name's spaces survive). IFS=tab keeps each column intact.
 IFS=$'\x1f' read -r model cwd ctx_pct cost lines_add lines_rem effort \
     think fast five_pct seven_pct five_reset seven_reset out_style version vim_mode exceeds \
+    duration_ms worktree agent pr_num pr_state \
     < <(echo "$input" | jq -r '[
         .model.display_name             // "Claude",
         .cwd                            // "",
@@ -47,7 +48,12 @@ IFS=$'\x1f' read -r model cwd ctx_pct cost lines_add lines_rem effort \
         (.output_style.name             // ""),
         (.version                       // ""),
         (.vim.mode                      // ""),
-        (.exceeds_200k_tokens           // false)
+        (.exceeds_200k_tokens           // false),
+        (.cost.total_duration_ms        // 0),
+        (.workspace.git_worktree        // .worktree.name // ""),
+        (.agent.name                    // ""),
+        (.pr.number                     // ""),
+        (.pr.review_state               // "")
       ] | map(tostring) | join("")')
 
 dir="$cwd"
@@ -94,10 +100,22 @@ fmt_reset() {
   [ -n "$clk" ] && printf '%s' "${DIM}${GRAY}→${clk}${RESET}"
 }
 
+# Human-readable session duration from milliseconds ($1). Emits nothing at 0.
+fmt_dur() {
+  local s=$(( ${1:-0} / 1000 ))
+  [ "$s" -le 0 ] && return
+  if   [ "$s" -ge 3600 ]; then printf '%dh%dm' "$((s/3600))" "$(((s%3600)/60))"
+  elif [ "$s" -ge 60 ];   then printf '%dm' "$((s/60))"
+  else                         printf '%ds' "$s"
+  fi
+}
+
 # ── Line 1: identity — who & where (space-separated, no bars) ────────
 line1="${DIM}${CYAN}${model}${RESET}"
-[ -n "$branch" ] && line1="${line1}  ${DIM}${MAGENTA}${branch}${RESET}"
-[ -n "$acct" ]   && line1="${line1}  ${DIM}${GREEN}${acct}${RESET}"
+[ -n "$branch" ]   && line1="${line1}  ${DIM}${MAGENTA}${branch}${RESET}"
+[ -n "$worktree" ] && line1="${line1}  ${DIM}${BLUE}wt:${worktree}${RESET}"
+[ -n "$acct" ]     && line1="${line1}  ${DIM}${GREEN}${acct}${RESET}"
+[ -n "$agent" ]    && line1="${line1}  ${DIM}${MAGENTA}⚙${agent}${RESET}"
 
 # ── Line 2: this session — usage + reasoning mode ────────────────────
 # Context window usage (+ 200k warning badge when exceeded)
@@ -108,6 +126,10 @@ line2="${DIM}${c}ctx ${ctx_pct}%${RESET}"
 # Session cost (2 decimals)
 cost_fmt=$(LC_NUMERIC=C printf '%.2f' "$cost")
 line2="${line2}  ${SEP}  ${DIM}${GREEN}\$${cost_fmt}${RESET}"
+
+# Session wall-clock duration
+dur=$(fmt_dur "$duration_ms")
+[ -n "$dur" ] && line2="${line2}  ${SEP}  ${DIM}${BLUE}${dur}${RESET}"
 
 # Lines changed this session (skip when nothing touched)
 if [ "$lines_add" != "0" ] || [ "$lines_rem" != "0" ]; then
@@ -129,6 +151,19 @@ sc=$(pct_color "$seven_pct")
 five_seg="${DIM}${fc}5h ${five_pct}%${RESET}$(fmt_reset "$five_reset" '%H:%M')"
 seven_seg="${DIM}${sc}7d ${seven_pct}%${RESET}$(fmt_reset "$seven_reset" '%m-%d %H:%M')"
 line3="${five_seg}  ${SEP}  ${seven_seg}"
+
+# Active PR (number + review state); state color: approved=green,
+# changes_requested=red, otherwise yellow.
+if [ -n "$pr_num" ]; then
+  case "$pr_state" in
+    approved)          ps=$GREEN ;;
+    changes_requested) ps=$RED ;;
+    *)                 ps=$YELLOW ;;
+  esac
+  pr_seg="${DIM}${CYAN}PR#${pr_num}${RESET}"
+  [ -n "$pr_state" ] && pr_seg="${pr_seg} ${DIM}${ps}${pr_state}${RESET}"
+  line3="${line3}  ${SEP}  ${pr_seg}"
+fi
 
 # Vim mode · version · (non-default) output style
 [ -n "$vim_mode" ]                                   && line3="${line3}  ${SEP}  ${DIM}${GRAY}${vim_mode}${RESET}"

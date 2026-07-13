@@ -6,15 +6,18 @@ Scope: personal setup only (`~/.claude`). Project-level config lives in each rep
 
 ## Repo contents
 
-| File                    | Target                            | Purpose                                                                           |
-| ----------------------- | --------------------------------- | --------------------------------------------------------------------------------- |
-| `setup.sh`              | —                                 | Installer: applies everything below to the profile                                |
-| `settings.json`         | `~/.claude/settings.json`         | Core settings: model, hooks, status line, plugins (deep-merged, not overwritten)  |
-| `statusline-command.sh` | `~/.claude/statusline-command.sh` | 4-line status line: identity · session usage · rate limits · cwd (details inside) |
-| `CLAUDE.md`             | `~/.claude/CLAUDE.md`             | Global memory / behavior rules                                                    |
-| `keybindings.json`      | `~/.claude/keybindings.json`      | `shift+enter` → newline                                                           |
+| File                     | Target                            | Purpose                                                                                         |
+| ------------------------ | --------------------------------- | ----------------------------------------------------------------------------------------------- |
+| `setup.sh`               | —                                 | Installer: applies everything below to the profile                                              |
+| `settings.json`          | `~/.claude/settings.json`         | Core settings: model, hooks, status line, plugins (deep-merged, not overwritten)                |
+| `statusline-command.sh`  | `~/.claude/statusline-command.sh` | 4-line status line: identity · session usage · rate limits · cwd (details inside)               |
+| `CLAUDE.md`              | `~/.claude/CLAUDE.md`             | Global memory / behavior rules                                                                  |
+| `keybindings.json`       | `~/.claude/keybindings.json`      | `shift+enter` → newline                                                                         |
+| `share-claude-config.sh` | —                                 | Mirror the config into a 2nd account (`~/.claude2`) via symlinks — see [SHARING.md](SHARING.md) |
 
 All paths inside `settings.json` use `~` / `$HOME`, so the files are portable as-is — no path editing needed.
+
+Running two accounts on one machine (personal + work)? After `setup.sh`, use [`share-claude-config.sh`](SHARING.md) to make the second profile share everything except credentials.
 
 ______________________________________________________________________
 
@@ -117,7 +120,7 @@ From `microsoft/playwright-cli` (1): `playwright-cli`.
 
 ### 6. Verify
 
-1. [ ] Status line renders 4 lines at the bottom: identity (`model · branch · account`) / session (`ctx% · cost · ±lines · effort`) / account (`5h & 7d limits · vim · version`) / full cwd path
+1. [ ] Status line renders 4 lines at the bottom: identity (`model · branch · worktree · account · agent`) / session (`ctx% · cost · duration · ±lines · effort`) / account (`5h & 7d limits · PR · vim · version`) / full cwd path. Worktree, agent, and PR segments appear only when present.
 2. [ ] `/plugin` shows all 8 plugins enabled
 3. [ ] context-mode auto-deployed its hook: `~/.claude/hooks/context-mode-cache-heal.mjs` exists and `settings.json` gained a `SessionStart` entry
 4. [ ] Ask Claude to write a test `.md` file — the mdformat hook should reformat it
@@ -129,14 +132,22 @@ ______________________________________________________________________
 
 ### Key choices
 
-| Setting                   | Value                | Why                                  |
-| ------------------------- | -------------------- | ------------------------------------ |
-| `model`                   | `claude-fable-5[1m]` | Fable 5 with 1M context as default   |
-| `effortLevel`             | `xhigh`              | Max reasoning effort                 |
-| `editorMode`              | `vim`                | Vim keybindings in the prompt editor |
-| `permissions.defaultMode` | `auto`               | Auto-accept low-risk tool calls      |
-| `useAutoModeDuringPlan`   | `true`               | Keep auto mode while in plan mode    |
-| `verbose`                 | `true`               | Show full tool output                |
+| Setting                    | Value                | Why                                            |
+| -------------------------- | -------------------- | ---------------------------------------------- |
+| `model`                    | `claude-fable-5[1m]` | Fable 5 with 1M context as default             |
+| `effortLevel`              | `xhigh`              | Max reasoning effort                           |
+| `editorMode`               | `vim`                | Vim keybindings in the prompt editor           |
+| `permissions.defaultMode`  | `auto`               | Auto-accept low-risk tool calls                |
+| `useAutoModeDuringPlan`    | `true`               | Keep auto mode while in plan mode              |
+| `verbose`                  | `true`               | Show full tool output                          |
+| `language`                 | `türkçe`             | UI / responses language                        |
+| `tui`                      | `fullscreen`         | Full-screen TUI layout                         |
+| `autoUpdatesChannel`       | `stable`             | Track the stable release channel               |
+| `worktree.baseRef`         | `fresh`              | New worktrees branch from a fresh base ref     |
+| `switchModelsOnFlag`       | `false`              | Don't auto-switch models on `[1m]`-style flags |
+| `remoteControlAtStartup`   | `false`              | No remote control session at launch            |
+| `skipWorkflowUsageWarning` | `true`               | Suppress the workflow token-usage warning      |
+| `inputNeededNotifEnabled`  | `false`              | No OS notification when input is needed        |
 
 ### Hooks
 
