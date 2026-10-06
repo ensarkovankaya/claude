@@ -6,7 +6,7 @@ Run two Claude Code accounts on one machine (e.g. personal + work) without maint
 repo ──setup.sh──► ~/.claude (canonical) ──share-claude-config.sh──► ~/.claude2 (symlinks)
 ```
 
-The two accounts differ **only** in their credentials and `.claude.json`. Everything else is one shared source of truth.
+Everything listed under [What it shares](#what-it-shares) is one shared source of truth; everything else stays per-account — most importantly the credentials and `.claude.json`.
 
 ______________________________________________________________________
 
@@ -47,29 +47,31 @@ ______________________________________________________________________
 | `keybindings.json`                     | key bindings                                               |
 | `statusline-command.sh`                | status line script                                         |
 
+The auto session title hook keeps its state next to the script it runs from (`<profile>/auto-session-title/`, symlinks resolved). Since `hooks` is shared, both accounts use the source profile's state — it follows the shared sessions with no extra link.
+
 ## What it never touches (per-account, by design)
 
-`.claude.json`, credentials / OS keychain, cache, statsig, telemetry. These must stay distinct per account — sharing them would cross the two logins.
+Everything not listed above — notably `.claude.json`, credentials / OS keychain, cache, statsig, telemetry, todos, shell snapshots. The first two must stay distinct per account — sharing them would cross the two logins.
 
-> Because `settings.json` is shared and its `statusLine.command` is an absolute path (`~/.claude/statusline-command.sh`), both accounts run the same status line script. The script resolves the active account's email from the right `.claude.json` using `CLAUDE_CONFIG_DIR`, so each account still shows its own identity.
+> Because `settings.json` is shared and its `statusLine.command` is an absolute path into the source profile (`bash "/Users/<you>/.claude/statusline-command.sh"`, written by `setup.sh`), both accounts run the same status line script. The script resolves the active account's email from the right `.claude.json` using `CLAUDE_CONFIG_DIR`, so each account still shows its own identity.
 
 ______________________________________________________________________
 
 ## How it works
 
 1. **Arg parsing.** Optional leading `--dry-run` sets a flag; remaining positionals override `SOURCE` / `TARGET` (defaults `~/.claude` → `~/.claude2`).
-2. **Guards.** Both dirs must exist, and `SOURCE` must not resolve to the same path as `TARGET` (compared via `cd && pwd`) — otherwise it aborts before touching anything.
+2. **Guards.** `SOURCE` must exist; a missing `TARGET` is created (log in to it once with `CLAUDE_CONFIG_DIR=<target> claude`). Both are resolved to absolute, symlink-free paths (`cd && pwd -P`), so links never dangle even with a relative `SOURCE`; if they resolve to the same path it aborts before touching anything.
 3. **Per-item loop** over `SHARED_ITEMS`, each item handled idempotently:
    - **No source** (`$SOURCE/$item` missing) → `skip`, nothing to link.
    - **Already the correct symlink** (`readlink` points at the source) → `skip`, so re-runs are safe.
-   - **A real file/dir or a stale symlink is in the way** → it's **moved** (never deleted) into a timestamped `TARGET/.share-backup-<ts>/` first, then the correct symlink is created.
+   - **A real file/dir or a stale symlink is in the way** → it's **moved** (never deleted) into a per-run `TARGET/.share-backup-<ts>-<pid>/` first, then the correct symlink is created.
 4. **`--dry-run`** routes every mutating command (`mkdir`, `mv`, `ln`) through a `run()` wrapper that just echoes `[dry-run] …` instead of executing — so you can preview the full plan with zero side effects.
 5. **Summary.** Prints counts (`linked / backed up / skipped`), the backup dir path if anything was moved, and the explicit list of what stays per-account.
 
 ### Safety properties
 
 - **Non-destructive** — anything in the way is backed up, never removed.
-- **Idempotent** — correct symlinks are detected and skipped; safe to run repeatedly (e.g. after each `setup.sh`).
+- **Idempotent** — correct symlinks are detected and skipped; safe to run repeatedly.
 - **`set -euo pipefail`** — aborts on the first error rather than half-linking.
 
 ______________________________________________________________________
@@ -77,9 +79,9 @@ ______________________________________________________________________
 ## Typical workflow
 
 ```sh
-./setup.sh                    # 1. install repo → ~/.claude
-./share-claude-config.sh      # 2. mirror ~/.claude → ~/.claude2 via symlinks
-CLAUDE_CONFIG_DIR=~/.claude2 claude   # 3. run the second account
+./setup.sh                            # 1. install repo → ~/.claude
+./share-claude-config.sh              # 2. mirror ~/.claude → ~/.claude2 via symlinks (creates ~/.claude2)
+CLAUDE_CONFIG_DIR=~/.claude2 claude   # 3. run the second account; /login once
 ```
 
-Re-run both after pulling repo updates: `setup.sh` refreshes `~/.claude`, and because `~/.claude2` symlinks straight back at it, the second account picks the changes up with no extra step (re-run the share script only when a **new** shared item appears).
+After pulling repo updates, re-run only `setup.sh` (against `~/.claude`): `~/.claude2` symlinks straight back at it, so the second account picks the changes up with no extra step. `setup.sh` refuses to run against `~/.claude2` itself. Re-run the share script only when a **new** shared item appears.

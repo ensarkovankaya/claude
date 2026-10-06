@@ -72,6 +72,5 @@
   "language": "türkçe",
   "worktree": {
     "baseRef": "fresh"
-  },
-  "model": "claude-fable-5[1m]"
+  }
 }

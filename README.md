@@ -30,14 +30,14 @@ ______________________________________________________________________
 # Claude Code CLI
 npm install -g @anthropic-ai/claude-code   # or the native installer
 
-# jq — required by the status line script and the mdformat hook
+# jq — required by setup.sh (aborts without it), the status line and the mdformat hook
 brew install jq
 
 # mdformat — markdown auto-formatter used by the PostToolUse hook.
 # Must end up at ~/.local/bin/mdformat (uv and pipx both install there).
 uv tool install mdformat                   # or: pipx install mdformat
 
-# python3 — runs the auto session title hook
+# python3 >= 3.8 — runs the auto session title hook (macOS system python 3.9 is fine)
 brew install python
 ```
 
@@ -58,15 +58,19 @@ git clone https://github.com/ensarkovankaya/claude.git && cd claude
 
 What `setup.sh` does (details in the script itself):
 
-- **`settings.json` is deep-merged** into the existing file via `jq` (timestamped backup taken first) — fields not defined in the repo file, like the `SessionStart` hook that context-mode auto-adds, are preserved. Created from scratch if missing.
-- `statusline-command.sh` and `hooks/auto-session-title.py` copied + `chmod +x`; the `statusLine.command` and `UserPromptSubmit` hook paths in settings are rewritten to point into the active profile dir. `CLAUDE.md` and `keybindings.json` copied.
-- Warns if `mdformat` or `python3` is missing.
+- **`settings.json` is deep-merged** into the existing file via `jq` (backup taken first, newest 5 kept) — fields not defined in the repo file, like the `SessionStart` hook that context-mode auto-adds, are preserved. Created from scratch if missing; aborts if the existing file is not a JSON object.
+  - Repo scalar values (e.g. `effortLevel`) win, so a re-run resets changes made via `/config`. `model` is deliberately not in the repo — pick it with `/model`.
+  - Hook lists are merged per event: a repo hook replaces an existing entry with the same command (`$HOME`/`~` normalized), other hooks in that event are kept.
+- `statusline-command.sh` and `hooks/auto-session-title.py` copied + `chmod +x`; the `statusLine.command` and hook script paths in settings are rewritten to point into the active profile dir. `CLAUDE.md` and `keybindings.json` copied.
+- Warns if `mdformat` or `python3 >= 3.8` is missing.
 
 It honors `CLAUDE_CONFIG_DIR`, so alternate profiles work too:
 
 ```sh
-CLAUDE_CONFIG_DIR=~/.claude2 ./setup.sh
+CLAUDE_CONFIG_DIR=~/.work-claude ./setup.sh
 ```
+
+A profile mirrored by [`share-claude-config.sh`](SHARING.md) is refused (its files are symlinks into the source profile) — run `setup.sh` against the source profile instead.
 
 ### 4. Plugins & marketplaces
 
@@ -91,40 +95,37 @@ Then verify with `/plugin`. If anything is missing, install manually:
 /plugin install codex@openai-codex
 ```
 
-| Plugin            | Marketplace             | Purpose                                                                         |
-| ----------------- | ----------------------- | ------------------------------------------------------------------------------- |
-| `context7`        | claude-plugins-official | Live library/framework docs lookup                                              |
-| `serena`          | claude-plugins-official | LSP-based symbol-level code navigation/editing                                  |
-| `superpowers`     | claude-plugins-official | Extended skill collection                                                       |
-| `gopls-lsp`       | claude-plugins-official | Go language server integration                                                  |
-| `skill-creator`   | claude-plugins-official | Authoring new skills                                                            |
-| `frontend-design` | claude-plugins-official | Frontend/UI design assistance                                                   |
-| `context-mode`    | mksglu/context-mode     | Context-window protection: sandboxed exec + FTS5 knowledge base (`ctx_*` tools) |
-| `codex`           | openai/codex-plugin-cc  | OpenAI Codex integration                                                        |
+| Plugin            | Marketplace (repo)                      | Purpose                                                                         |
+| ----------------- | --------------------------------------- | ------------------------------------------------------------------------------- |
+| `context7`        | `claude-plugins-official`               | Live library/framework docs lookup                                              |
+| `serena`          | `claude-plugins-official`               | LSP-based symbol-level code navigation/editing                                  |
+| `superpowers`     | `claude-plugins-official`               | Extended skill collection                                                       |
+| `gopls-lsp`       | `claude-plugins-official`               | Go language server integration                                                  |
+| `skill-creator`   | `claude-plugins-official`               | Authoring new skills                                                            |
+| `frontend-design` | `claude-plugins-official`               | Frontend/UI design assistance                                                   |
+| `context-mode`    | `context-mode` (mksglu/context-mode)    | Context-window protection: sandboxed exec + FTS5 knowledge base (`ctx_*` tools) |
+| `codex`           | `openai-codex` (openai/codex-plugin-cc) | OpenAI Codex integration                                                        |
 
-### 5. Install personal skills
+### 5. Optional skills
 
-User-level skills live in `~/.claude/skills/` (available in every project). They are installed from their upstream sources, not synced between machines:
+Not part of this setup; enable where needed:
 
-```sh
-# Matt Pocock's skills — https://github.com/mattpocock/skills
-# Pick the ones you use; make sure setup-matt-pocock-skills is selected,
-# then run /setup-matt-pocock-skills once per repo inside claude
-# (it scaffolds the repo's issue tracker / triage labels / docs config).
-npx skills@latest add mattpocock/skills
+- **Matt Pocock's skills** ([mattpocock/skills](https://github.com/mattpocock/skills)) ship as a plugin. Enable it per project (e.g. `enabledPlugins` in the repo's `.claude/settings.local.json`) or globally inside claude:
 
-# Playwright skills — https://github.com/microsoft/playwright-cli
-npm install -g playwright-cli
-playwright-cli install --skills
-```
+  ```
+  /plugin install mattpocock-skills@claude-plugins-official
+  ```
 
-Currently installed from `mattpocock/skills` (13): `diagnose`, `grill-me`, `grill-with-docs`, `handoff`, `improve-codebase-architecture`, `prototype`, `setup-matt-pocock-skills`, `tdd`, `to-issues`, `to-prd`, `triage`, `write-a-skill`, `zoom-out`.
+- **Playwright CLI + its skills** ([microsoft/playwright-cli](https://github.com/microsoft/playwright-cli)):
 
-From `microsoft/playwright-cli` (1): `playwright-cli`.
+  ```sh
+  npm install -g @playwright/cli@latest
+  playwright-cli install --skills
+  ```
 
 ### 6. Verify
 
-1. [ ] Status line renders 4 lines at the bottom: identity (`model · branch · worktree · account · agent`) / session (`ctx% · cost · duration · ±lines · effort`) / account (`5h & 7d limits · PR · vim · version`) / full cwd path. Worktree, agent, and PR segments appear only when present.
+1. [ ] Status line renders 4 lines at the bottom: identity (`model · branch · worktree · account · agent`) / session (`ctx% · ⚠200k+ · cost · duration · ±lines · effort · think/fast`) / account (`5h & 7d limits · PR · vim · version · output style`) / full cwd path. Every segment except model, ctx%, cost and cwd appears only when present.
 2. [ ] `/plugin` shows all 8 plugins enabled
 3. [ ] context-mode auto-deployed its hook: `~/.claude/hooks/context-mode-cache-heal.mjs` exists and `settings.json` gained a `SessionStart` entry
 4. [ ] Ask Claude to write a test `.md` file — the mdformat hook should reformat it
@@ -137,31 +138,34 @@ ______________________________________________________________________
 
 ### Key choices
 
-| Setting                    | Value                | Why                                            |
-| -------------------------- | -------------------- | ---------------------------------------------- |
-| `model`                    | `claude-fable-5[1m]` | Fable 5 with 1M context as default             |
-| `effortLevel`              | `xhigh`              | Max reasoning effort                           |
-| `editorMode`               | `vim`                | Vim keybindings in the prompt editor           |
-| `permissions.defaultMode`  | `auto`               | Auto-accept low-risk tool calls                |
-| `useAutoModeDuringPlan`    | `true`               | Keep auto mode while in plan mode              |
-| `verbose`                  | `true`               | Show full tool output                          |
-| `language`                 | `türkçe`             | UI / responses language                        |
-| `tui`                      | `fullscreen`         | Full-screen TUI layout                         |
-| `autoUpdatesChannel`       | `stable`             | Track the stable release channel               |
-| `worktree.baseRef`         | `fresh`              | New worktrees branch from a fresh base ref     |
-| `switchModelsOnFlag`       | `false`              | Don't auto-switch models on `[1m]`-style flags |
-| `remoteControlAtStartup`   | `false`              | No remote control session at launch            |
-| `skipWorkflowUsageWarning` | `true`               | Suppress the workflow token-usage warning      |
-| `inputNeededNotifEnabled`  | `false`              | No OS notification when input is needed        |
+| Setting                             | Value        | Why                                                                                    |
+| ----------------------------------- | ------------ | -------------------------------------------------------------------------------------- |
+| `effortLevel`                       | `xhigh`      | Very high reasoning effort (one step below `max`)                                      |
+| `editorMode`                        | `vim`        | Vim keybindings in the prompt editor                                                   |
+| `permissions.defaultMode`           | `auto`       | Auto-accept low-risk tool calls                                                        |
+| `useAutoModeDuringPlan`             | `true`       | Keep auto mode while in plan mode                                                      |
+| `skipAutoPermissionPrompt`          | `true`       | No confirmation prompt when entering auto mode                                         |
+| `skipDangerousModePermissionPrompt` | `true`       | No confirmation prompt when entering bypass-permissions mode                           |
+| `verbose`                           | `true`       | Show full tool output                                                                  |
+| `language`                          | `türkçe`     | UI / responses language                                                                |
+| `tui`                               | `fullscreen` | Full-screen TUI layout                                                                 |
+| `statusLine.padding`                | `0`          | Status line flush with the edge                                                        |
+| `autoUpdatesChannel`                | `stable`     | Track the stable release channel                                                       |
+| `worktree.baseRef`                  | `fresh`      | New worktrees branch from the remote default branch (the default; `head` = local HEAD) |
+| `switchModelsOnFlag`                | `false`      | Don't auto-switch models on `[1m]`-style flags                                         |
+| `remoteControlAtStartup`            | `false`      | No remote control session at launch                                                    |
+| `skipWorkflowUsageWarning`          | `true`       | Suppress the workflow token-usage warning                                              |
+| `inputNeededNotifEnabled`           | `false`      | No OS notification when input is needed                                                |
+| `agentPushNotifEnabled`             | `false`      | No push notification from agents                                                       |
 
 ### Hooks
 
 1. **PostToolUse (Write|Edit|MultiEdit) → mdformat** — declared in `settings.json`. Auto-formats any `.md`/`.markdown` file Claude writes, using `mdformat --wrap=keep --number`. Fails silently (`|| true`) so a missing binary never blocks edits.
 2. **UserPromptSubmit → `auto-session-title.py`** — declared in `settings.json`. Sets a `/rename`-style title via `hookSpecificOutput.sessionTitle` on every user prompt, only when it changes:
-   - **Jira key:** worktree branch (`feat/GR-1234-add-filter`) > first `GR-`/`YLC-` key in the prompt > the key set earlier.
+   - **Jira key:** current git branch of the cwd (`feat/GR-1234-add-filter`) > the key picked earlier in the session > first `GR-`/`YLC-` key in the prompt. A key merely mentioned later doesn't retitle the session.
    - **Description:** branch part after the key > Claude's own `ai-title` from the transcript, slugified (no extra model call; it exists from the 2nd prompt on).
-   - **Manual `/rename` wins:** if the transcript's last `custom-title` differs from what the hook last set, that session is locked and never touched again.
-   - Skips non-user prompts (`-p`, SDK, loops). State: `~/.claude/auto-session-title/<session_id>.json` (delete it to unlock). Disable with `AUTO_SESSION_TITLE_DISABLE=1`. Fails silently.
+   - **Manual `/rename` wins:** if the transcript's last `custom-title` is neither what the hook last set nor what it would set now, that session is locked and never touched again. If the transcript can't be read, the hook does nothing (fail-closed).
+   - Skips non-user prompts (`-p`, SDK, loops) and harness-injected subagent/task messages (`<agent-message`, `<task-notification>`). State: `<profile>/auto-session-title/<session_id>.json`, next to the installed script with symlinks resolved — so a profile mirrored by `share-claude-config.sh` uses the source profile's state (delete the file to unlock). Disable with `AUTO_SESSION_TITLE_DISABLE=1`. Needs python3 >= 3.8; errors are swallowed.
 3. **SessionStart → `context-mode-cache-heal.mjs`** — auto-deployed by the context-mode plugin on install: it places the script under `~/.claude/hooks/` and adds the `SessionStart` entry to `settings.json` itself. Intentionally not part of the repo's `settings.json` — do not hand-copy or pre-configure it.
 
 ### Global memory (`CLAUDE.md`)

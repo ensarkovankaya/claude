@@ -35,10 +35,17 @@ SHARED_ITEMS=(
 )
 
 [[ -d "$SOURCE" ]] || { echo "ERROR: source not found: $SOURCE" >&2; exit 1; }
-[[ -d "$TARGET" ]] || { echo "ERROR: target not found: $TARGET" >&2; exit 1; }
-[[ "$(cd "$SOURCE" && pwd)" == "$(cd "$TARGET" && pwd)" ]] && { echo "ERROR: source == target" >&2; exit 1; }
+if [[ ! -d "$TARGET" ]]; then
+  echo "create target: $TARGET (log in once with: CLAUDE_CONFIG_DIR=$TARGET claude)"
+  [[ $DRY_RUN -eq 1 ]] || mkdir -p "$TARGET"
+fi
 
-BACKUP_DIR="$TARGET/.share-backup-$(date +%Y%m%d%H%M%S)"
+# absolute, symlink-free paths so links never resolve relative to TARGET
+SOURCE="$(cd "$SOURCE" && pwd -P)"
+[[ -d "$TARGET" ]] && TARGET="$(cd "$TARGET" && pwd -P)"
+[[ "$SOURCE" == "$TARGET" ]] && { echo "ERROR: source == target" >&2; exit 1; }
+
+BACKUP_DIR="$TARGET/.share-backup-$(date +%Y%m%d%H%M%S)-$$"
 
 run() {
   if [[ $DRY_RUN -eq 1 ]]; then
@@ -83,4 +90,4 @@ done
 echo
 echo "done: $linked linked, $backed_up backed up, $skipped skipped"
 [[ $backed_up -gt 0 && $DRY_RUN -eq 0 ]] && echo "backups in: $BACKUP_DIR"
-echo "NOT shared (per-account, by design): .claude.json, credentials/keychain, cache, statsig, telemetry"
+echo "NOT shared (per-account): everything else in $TARGET — notably .claude.json and credentials/keychain"
