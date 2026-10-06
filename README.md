@@ -6,14 +6,15 @@ Scope: personal setup only (`~/.claude`). Project-level config lives in each rep
 
 ## Repo contents
 
-| File                     | Target                            | Purpose                                                                                         |
-| ------------------------ | --------------------------------- | ----------------------------------------------------------------------------------------------- |
-| `setup.sh`               | —                                 | Installer: applies everything below to the profile                                              |
-| `settings.json`          | `~/.claude/settings.json`         | Core settings: model, hooks, status line, plugins (deep-merged, not overwritten)                |
-| `statusline-command.sh`  | `~/.claude/statusline-command.sh` | 4-line status line: identity · session usage · rate limits · cwd (details inside)               |
-| `CLAUDE.md`              | `~/.claude/CLAUDE.md`             | Global memory / behavior rules                                                                  |
-| `keybindings.json`       | `~/.claude/keybindings.json`      | `shift+enter` → newline                                                                         |
-| `share-claude-config.sh` | —                                 | Mirror the config into a 2nd account (`~/.claude2`) via symlinks — see [SHARING.md](SHARING.md) |
+| File                          | Target                                  | Purpose                                                                                         |
+| ----------------------------- | --------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| `setup.sh`                    | —                                       | Installer: applies everything below to the profile                                              |
+| `settings.json`               | `~/.claude/settings.json`               | Core settings: model, hooks, status line, plugins (deep-merged, not overwritten)                |
+| `statusline-command.sh`       | `~/.claude/statusline-command.sh`       | 4-line status line: identity · session usage · rate limits · cwd (details inside)               |
+| `hooks/auto-session-title.py` | `~/.claude/hooks/auto-session-title.py` | `UserPromptSubmit` hook: auto `/rename`-style session title (`GR-1234-short-desc`)              |
+| `CLAUDE.md`                   | `~/.claude/CLAUDE.md`                   | Global memory / behavior rules                                                                  |
+| `keybindings.json`            | `~/.claude/keybindings.json`            | `shift+enter` → newline                                                                         |
+| `share-claude-config.sh`      | —                                       | Mirror the config into a 2nd account (`~/.claude2`) via symlinks — see [SHARING.md](SHARING.md) |
 
 All paths inside `settings.json` use `~` / `$HOME`, so the files are portable as-is — no path editing needed.
 
@@ -35,6 +36,9 @@ brew install jq
 # mdformat — markdown auto-formatter used by the PostToolUse hook.
 # Must end up at ~/.local/bin/mdformat (uv and pipx both install there).
 uv tool install mdformat                   # or: pipx install mdformat
+
+# python3 — runs the auto session title hook
+brew install python
 ```
 
 ### 2. First launch & login
@@ -55,8 +59,8 @@ git clone https://github.com/ensarkovankaya/claude.git && cd claude
 What `setup.sh` does (details in the script itself):
 
 - **`settings.json` is deep-merged** into the existing file via `jq` (timestamped backup taken first) — fields not defined in the repo file, like the `SessionStart` hook that context-mode auto-adds, are preserved. Created from scratch if missing.
-- `statusline-command.sh` copied + `chmod +x`; the `statusLine.command` path in settings is rewritten to point into the active profile dir. `CLAUDE.md` and `keybindings.json` copied.
-- Warns if `mdformat` is missing.
+- `statusline-command.sh` and `hooks/auto-session-title.py` copied + `chmod +x`; the `statusLine.command` and `UserPromptSubmit` hook paths in settings are rewritten to point into the active profile dir. `CLAUDE.md` and `keybindings.json` copied.
+- Warns if `mdformat` or `python3` is missing.
 
 It honors `CLAUDE_CONFIG_DIR`, so alternate profiles work too:
 
@@ -125,6 +129,7 @@ From `microsoft/playwright-cli` (1): `playwright-cli`.
 3. [ ] context-mode auto-deployed its hook: `~/.claude/hooks/context-mode-cache-heal.mjs` exists and `settings.json` gained a `SessionStart` entry
 4. [ ] Ask Claude to write a test `.md` file — the mdformat hook should reformat it
 5. [ ] `shift+enter` inserts a newline in the chat input
+6. [ ] Send a prompt mentioning `GR-1234` — the session title becomes `GR-1234`, then gains a short description from the next prompt on
 
 ______________________________________________________________________
 
@@ -152,7 +157,12 @@ ______________________________________________________________________
 ### Hooks
 
 1. **PostToolUse (Write|Edit|MultiEdit) → mdformat** — declared in `settings.json`. Auto-formats any `.md`/`.markdown` file Claude writes, using `mdformat --wrap=keep --number`. Fails silently (`|| true`) so a missing binary never blocks edits.
-2. **SessionStart → `context-mode-cache-heal.mjs`** — auto-deployed by the context-mode plugin on install: it places the script under `~/.claude/hooks/` and adds the `SessionStart` entry to `settings.json` itself. Intentionally not part of the repo's `settings.json` — do not hand-copy or pre-configure it.
+2. **UserPromptSubmit → `auto-session-title.py`** — declared in `settings.json`. Sets a `/rename`-style title via `hookSpecificOutput.sessionTitle` on every user prompt, only when it changes:
+   - **Jira key:** worktree branch (`feat/GR-1234-add-filter`) > first `GR-`/`YLC-` key in the prompt > the key set earlier.
+   - **Description:** branch part after the key > Claude's own `ai-title` from the transcript, slugified (no extra model call; it exists from the 2nd prompt on).
+   - **Manual `/rename` wins:** if the transcript's last `custom-title` differs from what the hook last set, that session is locked and never touched again.
+   - Skips non-user prompts (`-p`, SDK, loops). State: `~/.claude/auto-session-title/<session_id>.json` (delete it to unlock). Disable with `AUTO_SESSION_TITLE_DISABLE=1`. Fails silently.
+3. **SessionStart → `context-mode-cache-heal.mjs`** — auto-deployed by the context-mode plugin on install: it places the script under `~/.claude/hooks/` and adds the `SessionStart` entry to `settings.json` itself. Intentionally not part of the repo's `settings.json` — do not hand-copy or pre-configure it.
 
 ### Global memory (`CLAUDE.md`)
 

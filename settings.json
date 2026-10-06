@@ -13,6 +13,17 @@
           }
         ]
       }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$HOME/.claude/hooks/auto-session-title.py\"",
+            "timeout": 5
+          }
+        ]
+      }
     ]
   },
   "statusLine": {

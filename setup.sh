@@ -14,9 +14,10 @@
 #                              only keys defined in the repo file are applied.
 #                              A timestamped backup is taken first.
 #   2. statusline-command.sh -> copied + chmod +x
+#      hooks/auto-session-title.py -> copied + chmod +x
 #   3. CLAUDE.md             -> copied
 #   4. keybindings.json      -> copied
-#   5. Warns if jq / mdformat are missing.
+#   5. Warns if jq / mdformat / python3 are missing.
 
 set -euo pipefail
 
@@ -33,15 +34,17 @@ mkdir -p "$CLAUDE_DIR"
 #    profiles (CLAUDE_CONFIG_DIR) get a working status line too.
 TARGET="$CLAUDE_DIR/settings.json"
 STATUSLINE_CMD="bash $CLAUDE_DIR/statusline-command.sh"
+TITLE_CMD="\"$CLAUDE_DIR/hooks/auto-session-title.py\""
+REWRITE='.statusLine.command = $sl | .hooks.UserPromptSubmit[0].hooks[0].command = $tc'
 if [ -f "$TARGET" ]; then
   cp "$TARGET" "$TARGET.bak.$(date +%Y%m%d%H%M%S)"
-  jq -s --arg sl "$STATUSLINE_CMD" \
-    '.[0] * .[1] | .statusLine.command = $sl' \
+  jq -s --arg sl "$STATUSLINE_CMD" --arg tc "$TITLE_CMD" \
+    ".[0] * .[1] | $REWRITE" \
     "$TARGET" "$REPO_DIR/settings.json" > "$TARGET.tmp"
   mv -f "$TARGET.tmp" "$TARGET"
   echo "merged   settings.json (backup taken)"
 else
-  jq --arg sl "$STATUSLINE_CMD" '.statusLine.command = $sl' \
+  jq --arg sl "$STATUSLINE_CMD" --arg tc "$TITLE_CMD" "$REWRITE" \
     "$REPO_DIR/settings.json" > "$TARGET"
   echo "created  settings.json"
 fi
@@ -50,6 +53,12 @@ fi
 cp "$REPO_DIR/statusline-command.sh" "$CLAUDE_DIR/statusline-command.sh"
 chmod +x "$CLAUDE_DIR/statusline-command.sh"
 echo "copied   statusline-command.sh"
+
+# 2b. auto session title hook
+mkdir -p "$CLAUDE_DIR/hooks"
+cp "$REPO_DIR/hooks/auto-session-title.py" "$CLAUDE_DIR/hooks/auto-session-title.py"
+chmod +x "$CLAUDE_DIR/hooks/auto-session-title.py"
+echo "copied   hooks/auto-session-title.py"
 
 # 3. global memory
 cp "$REPO_DIR/CLAUDE.md" "$CLAUDE_DIR/CLAUDE.md"
@@ -62,5 +71,7 @@ echo "copied   keybindings.json"
 # 5. dependency warnings (non-fatal — the mdformat hook fails silently anyway)
 [ -x "$HOME/.local/bin/mdformat" ] || \
   echo "WARN: ~/.local/bin/mdformat not found — md auto-format hook will be a no-op (uv tool install mdformat)"
+command -v python3 >/dev/null 2>&1 || \
+  echo "WARN: python3 not found — auto session title hook will be a no-op (brew install python)"
 
 echo "done -> $CLAUDE_DIR (restart claude to apply)"
