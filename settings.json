@@ -9,7 +9,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "jq -r '.tool_input.file_path // empty' | { read -r f; case \"$f\" in *.md|*.markdown) \"$HOME/.local/bin/mdformat\" --wrap=keep --number \"$f\" || true ;; esac; }"
+            "command": "jq -r '.tool_input.file_path // empty' | { read -r f; case \"$f\" in \"$HOME\"/Obsedian/*) ;; *.md|*.markdown) \"$HOME/.local/bin/mdformat\" --wrap=keep --number \"$f\" || true ;; esac; }"
           }
         ]
       }
@@ -36,10 +36,11 @@
     "skill-creator@claude-plugins-official": true,
     "frontend-design@claude-plugins-official": true,
     "gopls-lsp@claude-plugins-official": true,
-    "serena@claude-plugins-official": true,
     "superpowers@claude-plugins-official": true,
     "context-mode@context-mode": true,
-    "codex@openai-codex": true
+    "codex@openai-codex": true,
+    "postman@claude-plugins-official": true,
+    "obsidian@obsidian-skills": true
   },
   "extraKnownMarketplaces": {
     "context-mode": {
@@ -54,12 +55,43 @@
         "source": "github",
         "repo": "openai/codex-plugin-cc"
       }
+    },
+    "obsidian-skills": {
+      "source": {
+        "source": "github",
+        "repo": "kepano/obsidian-skills"
+      }
+    },
+    "mattpocock": {
+      "source": {
+        "source": "github",
+        "repo": "mattpocock/skills"
+      }
+    },
+    "devfast": {
+      "source": {
+        "source": "github",
+        "repo": "devdotfast/whiteboard"
+      }
+    },
+    "ui-ux-pro-max-skill": {
+      "source": {
+        "source": "github",
+        "repo": "nextlevelbuilder/ui-ux-pro-max-skill"
+      },
+      "autoUpdate": true
+    },
+    "understand-anything": {
+      "source": {
+        "source": "github",
+        "repo": "Egonex-AI/Understand-Anything"
+      }
     }
   },
-  "effortLevel": "xhigh",
+  "effortLevel": "high",
   "skipDangerousModePermissionPrompt": true,
   "editorMode": "vim",
-  "verbose": true,
+  "verbose": false,
   "agentPushNotifEnabled": false,
   "inputNeededNotifEnabled": false,
   "skipAutoPermissionPrompt": true,
@@ -67,10 +99,28 @@
   "useAutoModeDuringPlan": true,
   "switchModelsOnFlag": false,
   "remoteControlAtStartup": false,
-  "autoUpdatesChannel": "stable",
+  "autoUpdatesChannel": "latest",
   "tui": "fullscreen",
   "language": "türkçe",
   "worktree": {
     "baseRef": "fresh"
+  },
+  "model": "opus",
+  "minimumVersion": "2.1.183",
+  "modelSettings": {
+    "claude-opus-5": {
+      "effortLevel": "xhigh"
+    },
+    "claude-opus-5-5": {
+      "effortLevel": "high"
+    }
+  },
+  "timeFormat": "24-hour",
+  "enableArtifact": false,
+  "autoMode": {
+    "soft_deny": [
+      "$defaults",
+      "Bash(psql:* prod*)"
+    ]
   }
 }
