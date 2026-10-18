@@ -10,7 +10,7 @@ Scope: personal setup only (`~/.claude`). Project-level config lives in each rep
 | ----------------------------- | --------------------------------------- | ----------------------------------------------------------------------------------------------- |
 | `setup.sh`                    | —                                       | Installer: applies everything below to the profile                                              |
 | `settings.json`               | `~/.claude/settings.json`               | Core settings: model, hooks, status line, plugins (deep-merged, not overwritten)                |
-| `statusline-command.sh`       | `~/.claude/statusline-command.sh`       | 4-line status line: identity · session usage · rate limits · cwd (details inside)               |
+| `statusline-command.sh`       | `~/.claude/statusline-command.sh`       | 4-line status line: identity · session usage · quota bars w/ pace marker · location (details inside) |
 | `hooks/auto-session-title.py` | `~/.claude/hooks/auto-session-title.py` | `UserPromptSubmit` hook: auto `/rename`-style session title (`GR-1234-short-desc`)              |
 | `CLAUDE.md`                   | `~/.claude/CLAUDE.md`                   | Global memory / behavior rules                                                                  |
 | `keybindings.json`            | `~/.claude/keybindings.json`            | `shift+enter` → newline                                                                         |
