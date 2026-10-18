@@ -148,7 +148,6 @@ ______________________________________________________________________
 | ----------------------------------- | ---------------------------------- | -------------------------------------------------------------------------------------- |
 | `model`                             | `opus`                             | Default model alias                                                                    |
 | `effortLevel`                       | `high`                             | Default reasoning effort                                                               |
-| `modelSettings`                     | per model                          | Effort per model: `claude-opus-5` → `xhigh`, `claude-opus-5-5` → `high`                |
 | `minimumVersion`                    | `2.1.183`                          | Refuse to run older Claude Code builds                                                 |
 | `editorMode`                        | `vim`                              | Vim keybindings in the prompt editor                                                   |
 | `permissions.defaultMode`           | `auto`                             | Auto-accept low-risk tool calls                                                        |

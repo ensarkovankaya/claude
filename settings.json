@@ -107,14 +107,6 @@
   },
   "model": "opus",
   "minimumVersion": "2.1.183",
-  "modelSettings": {
-    "claude-opus-5": {
-      "effortLevel": "xhigh"
-    },
-    "claude-opus-5-5": {
-      "effortLevel": "high"
-    }
-  },
   "timeFormat": "24-hour",
   "enableArtifact": false,
   "autoMode": {
