@@ -20,7 +20,8 @@
 #   Bars are 10 cells with 1/8 sub-cell blocks, colored by threshold:
 #   green < 50, yellow < 80, red >= 80. The pace marker ┃ sits where the
 #   elapsed share of the limit window falls: fill past it means the limit
-#   runs out before it resets at this pace.
+#   runs out before it resets at this pace. A red 7d bar still behind its
+#   marker is drawn dimmed: high but on pace, no need to grab attention.
 #
 # REQUIRES: jq; runs on macOS /bin/bash 3.2
 
@@ -92,6 +93,8 @@ GRAY=$'\033[90m'
 PACE=$'\033[38;5;136m'
 # Bars' green: 256-color 28 (#008700), darker than the theme's green
 BAR_GREEN=$'\033[38;5;28m'
+# Red bar still behind its pace marker: the theme's red, dimmed: no need to grab attention
+BAR_DARK_RED=$'\033[2;31m'
 DIM=$'\033[2m'
 
 SEP="${DIM}${GRAY}│${RESET}"
@@ -112,16 +115,22 @@ pct_color() {
 # Dim gray symbol/label ($1) followed by a space.
 sym() { printf '%s' "${DIM}${GRAY}$1${RESET} "; }
 
-# 10-cell bar for percent $1; optional $2 = cell index of the pace marker.
+# 10-cell bar for percent $1; optional $2 = cell index of the pace marker;
+# optional $3 = "dark" to draw a red bar dimmed while its fill has not
+# run past the marker cell.
 # Sub-cell precision: 80 eighths across the bar, so 1 eighth = 1.25%.
 bar() {
-  local p=$1 mark=${2:-} color eighths full rem i out=""
+  local p=$1 mark=${2:-} dark=${3:-} color eighths full rem i out=""
   [ "$p" -gt 100 ] && p=100
   [ "$p" -lt 0 ] && p=0
   color=$(pct_color "$p")
   [ "$color" = "$GREEN" ] && color=$BAR_GREEN
   eighths=$(( (p * BAR_CELLS * 8 + 50) / 100 ))
   full=$(( eighths / 8 )) rem=$(( eighths % 8 ))
+  if [ -n "$dark" ] && [ -n "$mark" ] && [ "$color" = "$RED" ] \
+     && [ "$eighths" -le $(( (mark + 1) * 8 )) ]; then
+    color=$BAR_DARK_RED
+  fi
   for (( i = 0; i < BAR_CELLS; i++ )); do
     if [ "$i" = "$mark" ]; then
       out="${out}${PACE}┃${RESET}"
@@ -234,7 +243,7 @@ flags=""
 # response). 5h resets within the day → time only; 7d → date + time.
 line3=""
 [ -n "$five_pct" ] && add line3 "$(sym 5h)$(bar "$five_pct" "$(pace_cell "$five_reset" 18000)") ${DIM}$(pct_color "$five_pct")${five_pct}%${RESET}$(fmt_reset "$five_reset" '%H:%M')"
-[ -n "$seven_pct" ] && add line3 "$(sym 7d)$(bar "$seven_pct" "$(pace_cell "$seven_reset" 604800)") ${DIM}$(pct_color "$seven_pct")${seven_pct}%${RESET}$(fmt_reset "$seven_reset" '%m-%d %H:%M')"
+[ -n "$seven_pct" ] && add line3 "$(sym 7d)$(bar "$seven_pct" "$(pace_cell "$seven_reset" 604800)" dark) ${DIM}$(pct_color "$seven_pct")${seven_pct}%${RESET}$(fmt_reset "$seven_reset" '%m-%d %H:%M')"
 
 # ── Line 4: location + client state ──────────────────────────────────
 line4=""
