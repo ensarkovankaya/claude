@@ -14,6 +14,7 @@ Scope: personal setup only (`~/.claude`). Project-level config lives in each rep
 | `hooks/auto-session-title.py` | `~/.claude/hooks/auto-session-title.py` | `UserPromptSubmit` hook: auto `/rename`-style session title (`GR-1234-short-desc`)                   |
 | `CLAUDE.md`                   | `~/.claude/CLAUDE.md`                   | Global memory / behavior rules                                                                       |
 | `keybindings.json`            | `~/.claude/keybindings.json`            | `shift+enter` → newline                                                                              |
+| `mods/pr-tracker/`            | `~/.claude/mods/pr-tracker/`            | Hooks-module mod: side pane listing the session's PRs grouped by task — see [Mods](#mods)            |
 | `share-claude-config.sh`      | —                                       | Mirror the config into a 2nd account (`~/.claude2`) via symlinks — see [SHARING.md](SHARING.md)      |
 
 All paths inside `settings.json` use `~` / `$HOME`, so the files are portable as-is — no path editing needed.
@@ -62,6 +63,7 @@ What `setup.sh` does (details in the script itself):
   - Repo scalar values (e.g. `effortLevel`, `model`) win, so a re-run resets changes made via `/config` / `/model`. Arrays (e.g. `autoMode.soft_deny`) are replaced, not appended; object keys not in the repo (e.g. a local `autoMode.environment`) are kept.
   - Hook lists are merged per event: a repo hook replaces an existing entry with the same command (`$HOME`/`~` normalized), other hooks in that event are kept.
 - `statusline-command.sh` and `hooks/auto-session-title.py` copied + `chmod +x`; the `statusLine.command` and hook script paths in settings are rewritten to point into the active profile dir. `CLAUDE.md` and `keybindings.json` copied.
+- Each `mods/<name>/` copied to `<profile>/mods/<name>/` and appended to `env.CLAUDE_CODE_PLUGIN_DIRS` (existing entries kept, no duplicates).
 - Warns if `mdformat` or `python3 >= 3.8` is missing.
 
 It honors `CLAUDE_CONFIG_DIR`, so alternate profiles work too:
@@ -178,6 +180,23 @@ ______________________________________________________________________
    - **Manual `/rename` wins:** if the transcript's last `custom-title` is neither what the hook last set nor what it would set now, that session is locked and never touched again. If the transcript can't be read, the hook does nothing (fail-closed).
    - Skips non-user prompts (`-p`, SDK, loops) and harness-injected subagent/task messages (`<agent-message`, `<task-notification>`). State: `<profile>/auto-session-title/<session_id>.json`, next to the installed script with symlinks resolved — so a profile mirrored by `share-claude-config.sh` uses the source profile's state (delete the file to unlock). Disable with `AUTO_SESSION_TITLE_DISABLE=1`. Needs python3 >= 3.8; errors are swallowed.
 3. **SessionStart → `context-mode-cache-heal.mjs`** — auto-deployed by the context-mode plugin on install: it places the script under `~/.claude/hooks/` and adds the `SessionStart` entry to `settings.json` itself. Intentionally not part of the repo's `settings.json` — do not hand-copy or pre-configure it.
+
+### Mods
+
+Hooks-module plugins loaded from disk via `env.CLAUDE_CODE_PLUGIN_DIRS`; an interactive session hot-reloads them on save.
+
+**`pr-tracker`** — side pane (`/prs`) listing the PRs opened in the session (subagents included), grouped by the task key (`ABC-123`) in the PR title or branch, with live state, review, approvers and CI from `gh pr view` (polled every 2 min). Opens in summary mode; `[detay]` toggles the detail view. A click on a PR or task opens it in the browser.
+
+- Needs `gh` (authenticated) and `node`.
+- Option `jiraBaseUrl` (e.g. `https://<site>.atlassian.net/browse/`): makes task keys clickable. Empty by default; set it locally, not in this repo:
+
+  ```json
+  "pluginConfigs": { "pr-tracker@inline": { "options": { "jiraBaseUrl": "https://<site>.atlassian.net/browse/" } } }
+  ```
+
+- Options `extraPrCommand` (regex for a non-`gh` command that opens PRs, e.g. your own script) and `ignoredPendingChecks` (regex for check names that stay pending forever and shouldn't hold the CI badge). Both empty by default.
+- Commands: `/prs [add <url…> | rm <repo#n> | scan | refresh | compact | close | clear]`.
+- Test: `claude plugin test mods/pr-tracker`.
 
 ### Global memory (`CLAUDE.md`)
 
