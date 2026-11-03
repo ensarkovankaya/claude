@@ -18,7 +18,7 @@ const ghView = (title: string, base: string, extra: Record<string, unknown> = {}
     ...extra,
   })
 
-test('PR create komutları tanınır', () => {
+test('recognizes PR-creating commands', () => {
   expect(isPrCreateCommand('cd x && gh pr create --title "ABC-1: A" --body b')).toBe(true)
   expect(isPrCreateCommand('gh api repos/acme/x/pulls -X POST -f title=t')).toBe(true)
   expect(isPrCreateCommand('gh pr view 16 --json state')).toBe(false)
@@ -29,18 +29,18 @@ test('PR create komutları tanınır', () => {
   expect(compilePattern('(')).toBeUndefined()
 })
 
-test('URL ayıklama tekilleştirir ve alt yolları keser', () => {
+test('URL parsing dedupes and strips sub-paths', () => {
   const text = `${PR_16}\n"html_url": "${PR_16}", ${PR_16}/commits ${DOCS_PR}`
   expect(parsePrUrls(text)).toEqual([PR_16, DOCS_PR])
 })
 
-test('task başlıktan, yoksa branch adından', () => {
-  expect(taskOf('ABC-12: Bekleyen Siparişler', 'feature/ABC-1-x')).toBe('ABC-12')
+test('task from title, else from branch name', () => {
+  expect(taskOf('ABC-12: Pending Orders', 'feature/ABC-1-x')).toBe('ABC-12')
   expect(taskOf('Fix typo', 'fix/OPS-7-config')).toBe('OPS-7')
-  expect(taskOf('Fix typo', 'fix-typo')).toBe('Diğer')
+  expect(taskOf('Fix typo', 'fix-typo')).toBe('Other')
 })
 
-test('yok sayılan pending check CI durumunu kilitlemez', () => {
+test('an ignored pending check does not hold the CI state', () => {
   expect(
     summarizeChecks([
       { name: 'lint', status: 'COMPLETED', conclusion: 'SUCCESS' },
@@ -53,7 +53,7 @@ test('yok sayılan pending check CI durumunu kilitlemez', () => {
   expect(summarizeChecks([])).toBe('none')
 })
 
-test('gruplar: açık işi olan önce, tamamı merged olan kapalı', () => {
+test('groups: those with open work first, all-merged ones collapsed', () => {
   const merged: Pr = { ...applyGhView(newPr(DOCS_PR, 1), ghView('ABC-11: A', 'development', { state: 'MERGED' }), 2) }
   const open: Pr = applyGhView(newPr(PR_16, 0), ghView('ABC-12: B', 'feature/ABC-10-order-list'), 2)
   const groups = groupByTask([merged, open])
@@ -62,7 +62,7 @@ test('gruplar: açık işi olan önce, tamamı merged olan kapalı', () => {
   expect(groups.map(group => isCollapsed(group, ['ABC-11']))).toEqual([false, false])
 })
 
-test('subagent gh pr create çıktısı panele düşer ve durum çekilir', { options: { jiraBaseUrl: 'https://example.atlassian.net/browse' } }, async ($, on) => {
+test('a subagent gh pr create output lands in the pane and its state is fetched', { options: { jiraBaseUrl: 'https://example.atlassian.net/browse' } }, async ($, on) => {
   mock.store(on)
   const clock = mock.clock(on, { now: 1_000 })
   on('session.id', () => ({ value: 'test-session' }))
@@ -70,7 +70,7 @@ test('subagent gh pr create çıktısı panele düşer ve durum çekilir', { opt
   on('process.run', ($, e) => (argvs.push([...e.argv]), {
     value: {
     exitCode: 0,
-    stdout: ghView('ABC-12: Bekleyen Siparişleri Listeleme', 'feature/ABC-10-order-list', {
+    stdout: ghView('ABC-12: List Pending Orders', 'feature/ABC-10-order-list', {
       latestReviews: [
         { author: { login: 'alice' }, state: 'APPROVED' },
         { author: { login: 'bob' }, state: 'COMMENTED' },
@@ -99,11 +99,11 @@ test('subagent gh pr create çıktısı panele düşer ve durum çekilir', { opt
     })
     const summary = JSON.stringify(await ui.drawn())
     expect(summary).toContain('orders-api#16')
-    expect(summary).not.toContain('Bekleyen Siparişleri')
+    expect(summary).not.toContain('Pending Orders')
 
     await ui.press({ key: 'mode' })
     const drawn = JSON.stringify(await ui.drawn())
-    expect(drawn).toContain('"✓ onaylayan: ","alice"')
+    expect(drawn).toContain('"✓ approved by: ","alice"')
     expect(drawn).not.toContain('bob')
     expect(drawn).toContain('orders-api#16')
     expect(drawn).toContain('ABC-12')
@@ -120,7 +120,7 @@ test('subagent gh pr create çıktısı panele düşer ve durum çekilir', { opt
     ])
 
     await ui.press({ key: 'mode' })
-    expect(JSON.stringify(await ui.drawn())).not.toContain('Bekleyen Siparişleri')
+    expect(JSON.stringify(await ui.drawn())).not.toContain('Pending Orders')
     await ui.unmount()
   }
 })

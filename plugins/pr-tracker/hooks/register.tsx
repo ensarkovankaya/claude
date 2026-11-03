@@ -35,15 +35,15 @@ type Saved = { prs: Pr[]; savedAt: number; scannedAt?: number; dismissed?: strin
 type Found = { url: string; at: number }
 
 const STATE_LABEL: Record<PrState, [string, string]> = {
-  OPEN: ['açık', 'success'],
+  OPEN: ['open', 'success'],
   DRAFT: ['draft', 'inactive'],
   MERGED: ['merged', 'merged'],
   CLOSED: ['closed', 'error'],
   UNKNOWN: ['…', 'inactive'],
 }
 const REVIEW_LABEL: Record<PrReview, [string, string] | undefined> = {
-  APPROVED: ['✓ onay', 'success'],
-  CHANGES_REQUESTED: ['✗ değişiklik', 'error'],
+  APPROVED: ['✓ approved', 'success'],
+  CHANGES_REQUESTED: ['✗ changes', 'error'],
   REVIEW_REQUIRED: ['⧗ review', 'warning'],
   NONE: undefined,
 }
@@ -104,7 +104,7 @@ async function runBin($: EngineInterface, candidates: readonly string[], args: s
       }
     }
   }
-  throw new Error(`${name} bulunamadı`)
+  throw new Error(`${name} not found`)
 }
 
 async function refresh($: EngineInterface, only?: readonly string[]): Promise<void> {
@@ -121,7 +121,7 @@ async function refresh($: EngineInterface, only?: readonly string[]): Promise<vo
         next =
           ran.exitCode === 0
             ? applyGhView(target, ran.stdout, await $.clock.now(), ignoredPending)
-            : { ...target, error: ran.stderr.trim().split('\n')[0] ?? 'gh hata' }
+            : { ...target, error: ran.stderr.trim().split('\n')[0] ?? 'gh error' }
       } catch (error) {
         next = { ...target, error: String(error).slice(0, 120) }
       }
@@ -182,12 +182,12 @@ async function transcriptPath($: EngineInterface): Promise<string | undefined> {
 async function scan($: EngineInterface): Promise<{ added: string[]; total: number } | { error: string }> {
   const path = await transcriptPath($)
   if (path === undefined) {
-    return { error: 'transcript dosyası bulunamadı' }
+    return { error: 'transcript file not found' }
   }
   const script = `${$.plugin.root}/scripts/scan-transcript.mjs`
   const ran = await runBin($, NODE_CANDIDATES, [script, path, JSON.stringify(createPatterns)], 120_000)
   if (ran.exitCode !== 0) {
-    return { error: ran.stderr.trim().split('\n')[0] ?? 'scan hata' }
+    return { error: ran.stderr.trim().split('\n')[0] ?? 'scan error' }
   }
   const result = JSON.parse(ran.stdout) as { prs: Found[] }
   const dismissed = new Set((await loadSaved($))?.dismissed ?? [])
@@ -200,7 +200,7 @@ async function scan($: EngineInterface): Promise<{ added: string[]; total: numbe
 async function autoScan($: EngineInterface): Promise<void> {
   const result = await scan($)
   if ('added' in result && result.added.length > 0) {
-    $.ui.toast(`pr-tracker: transcript'ten ${result.added.length} PR eklendi`)
+    $.ui.toast(`pr-tracker: added ${result.added.length} PR(s) from the transcript`)
     void openPane($).catch(() => undefined)
   }
   await refresh($)
@@ -229,7 +229,7 @@ export const register: Register = (on, options) => {
     await $.store.set(`cwd:${await $.session.id()}`, e.cwd)
     await $.command.register({
       name: 'prs',
-      description: "PR panelini aç/kapat; add <url…> | rm <repo#n> | scan | refresh | compact | clear",
+      description: "Toggle the PR pane; add <url…> | rm <repo#n> | scan | refresh | compact | clear",
       argumentHint: '[add <url…> | rm <repo#n> | scan | refresh | compact | close | clear]',
     })
     await restore($)
@@ -250,48 +250,48 @@ export const register: Register = (on, options) => {
       case 'open': {
         const opened = await openPane($)
 
-        return { text: opened.isPlaced ? 'PR paneli açık. Kapatmak: Esc veya /prs close' : `PR paneli açılamadı: ${opened.reason}` }
+        return { text: opened.isPlaced ? 'PR pane open. Close it with Esc or /prs close' : `Could not open the PR pane: ${opened.reason}` }
       }
       case 'close':
         await $.ui.close({ id: PANE })
 
-        return { text: 'PR paneli kapatıldı. Tekrar açmak: /prs' }
+        return { text: 'PR pane closed. Reopen it with /prs' }
       case 'add': {
         const fresh = await add($, parsePrUrls(rest.join(' ')))
         void openPane($).catch(() => undefined)
 
-        return { text: fresh.length > 0 ? `Eklendi: ${fresh.join(', ')}` : 'Yeni PR URL yok (zaten listede ya da geçersiz)' }
+        return { text: fresh.length > 0 ? `Added: ${fresh.join(', ')}` : 'No new PR URL (already listed or invalid)' }
       }
       case 'rm':
       case 'remove': {
         const removed = rest.length === 0 ? 0 : await remove($, rest.join(' '))
 
-        return { text: removed > 0 ? `Silindi: ${rest.join(' ')}` : 'Eşleşen PR yok. Kullanım: /prs rm <repo#n | url>' }
+        return { text: removed > 0 ? `Removed: ${rest.join(' ')}` : 'No matching PR. Usage: /prs rm <repo#n | url>' }
       }
       case 'scan': {
         const result = await scan($)
         if ('error' in result) {
-          return { text: `Scan başarısız: ${result.error}` }
+          return { text: `Scan failed: ${result.error}` }
         }
         void openPane($).catch(() => undefined)
 
-        return { text: `Transcript'te ${result.total} PR bulundu, ${result.added.length} yeni eklendi` }
+        return { text: `Found ${result.total} PR(s) in the transcript, ${result.added.length} new` }
       }
       case 'refresh':
         await refresh($, (await read($, prs)).map(pr => pr.url))
 
-        return { text: 'PR durumları yenilendi' }
+        return { text: 'PR states refreshed' }
       case 'compact':
         await update($, isCompact, value => !value)
 
-        return { text: (await read($, isCompact)) ? 'Özet görünüm' : 'Detay görünüm' }
+        return { text: (await read($, isCompact)) ? 'Summary view' : 'Detail view' }
       case 'clear':
         await update($, prs, () => [])
         await persist($, { scannedAt: await $.clock.now() })
 
-        return { text: 'PR listesi temizlendi' }
+        return { text: 'PR list cleared' }
       default:
-        return { text: 'Kullanım: /prs [open | close | add <url…> | rm <repo#n> | scan | refresh | compact | clear]' }
+        return { text: 'Usage: /prs [open | close | add <url…> | rm <repo#n> | scan | refresh | compact | clear]' }
     }
   })
 
@@ -303,7 +303,7 @@ export const register: Register = (on, options) => {
     const fresh = await add($, parsePrUrls(ran.text ?? ''))
     if (fresh.length > 0) {
       const where = e.agentId === undefined ? '' : ' (subagent)'
-      $.ui.toast(`PR eklendi${where}: ${fresh.map(url => url.replace('https://github.com/', '')).join(', ')}`)
+      $.ui.toast(`PR added${where}: ${fresh.map(url => url.replace('https://github.com/', '')).join(', ')}`)
       void openPane($).catch(() => undefined)
     }
 
@@ -339,22 +339,22 @@ export const register: Register = (on, options) => {
       <Box flexDirection="column">
         <Box flexDirection="row" justifyContent="space-between">
           <Text dimColor>
-            {list.length === 0 ? 'Henüz PR yok' : `${active} açık · ${merged} merged`}
+            {list.length === 0 ? 'No PRs yet' : `${active} open · ${merged} merged`}
           </Text>
           <Box flexDirection="row" gap={1}>
             <Button key="refresh" plain label="⟳" onPress={() => void refresh($, list.map(pr => pr.url)).catch(() => undefined)} />
-            <Button key="mode" plain label={compact ? '[detay]' : '[özet]'} onPress={() => update($, isCompact, value => !value)} />
+            <Button key="mode" plain label={compact ? '[detail]' : '[summary]'} onPress={() => update($, isCompact, value => !value)} />
           </Box>
         </Box>
         {list.length === 0 && (
           <Text dimColor wrap="wrap">
-            `gh pr create` (ana session veya subagent) çıktısındaki PR'lar burada görünür. Elle: /prs add &lt;url&gt;
+            PRs from `gh pr create` output (main session or subagent) show up here. Add one by hand: /prs add &lt;url&gt;
           </Text>
         )}
         {groups.map(group => {
           const isClosed = isCollapsed(group, flipped)
           const summary = [
-            group.active > 0 ? `${group.active} açık` : '',
+            group.active > 0 ? `${group.active} open` : '',
             group.merged > 0 ? `${group.merged} merged` : '',
             group.closed > 0 ? `${group.closed} closed` : '',
           ]
@@ -400,7 +400,7 @@ export const register: Register = (on, options) => {
                     </Text>
                     {isActive(pr) && (pr.approvers ?? []).length > 0 && (
                       <Text color="success" wrap="truncate">
-                        ✓ onaylayan: {(pr.approvers ?? []).join(', ')}
+                        ✓ approved by: {(pr.approvers ?? []).join(', ')}
                       </Text>
                     )}
                     {isActive(pr) && isStackedBase(pr.base) && (

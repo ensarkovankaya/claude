@@ -40,7 +40,8 @@
     "context-mode@context-mode": true,
     "codex@openai-codex": true,
     "postman@claude-plugins-official": true,
-    "obsidian@obsidian-skills": true
+    "obsidian@obsidian-skills": true,
+    "pr-tracker@ensarkovankaya": true
   },
   "extraKnownMarketplaces": {
     "context-mode": {
@@ -86,6 +87,13 @@
         "source": "github",
         "repo": "Egonex-AI/Understand-Anything"
       }
+    },
+    "ensarkovankaya": {
+      "source": {
+        "source": "github",
+        "repo": "ensarkovankaya/claude"
+      },
+      "autoUpdate": true
     }
   },
   "effortLevel": "high",

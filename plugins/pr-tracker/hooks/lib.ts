@@ -1,19 +1,19 @@
 import type { Pr, PrChecks, PrReview, PrState } from '../types'
 
-export const NO_TASK = 'Diğer'
+export const NO_TASK = 'Other'
 
 const PR_URL = /https:\/\/github\.com\/([\w.-]+)\/([\w.-]+)\/pull\/(\d+)/g
 const TASK_KEY = /\b([A-Z][A-Z0-9]+-\d+)\b/
 const DEFAULT_BASES = new Set(['development', 'develop', 'main', 'master'])
 const FAILED = new Set(['FAILURE', 'ERROR', 'TIMED_OUT', 'CANCELLED', 'ACTION_REQUIRED', 'STARTUP_FAILURE'])
 
-// Her grup: içindeki tüm regex'ler eşleşirse komut PR açan sayılır. scripts/scan-transcript.mjs de bunu kullanır.
+// A command opens a PR when every regex of one group matches. scripts/scan-transcript.mjs uses the same list.
 export const PR_CREATE_PATTERNS: readonly (readonly string[])[] = [
   ['\\bgh\\s+pr\\s+create\\b'],
   ['\\bgh\\s+api\\b', '/pulls\\b(?!/)', '(-X|--method)\\s+POST\\b|\\s-[fF]\\s+(title|head)='],
 ]
 
-// Ayardaki regex geçersizse yok sayılır.
+// An invalid regex in the options is ignored.
 export function compilePattern(source: unknown): RegExp | undefined {
   if (typeof source !== 'string' || source.trim() === '') {
     return undefined

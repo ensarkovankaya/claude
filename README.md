@@ -6,16 +6,17 @@ Scope: personal setup only (`~/.claude`). Project-level config lives in each rep
 
 ## Repo contents
 
-| File                          | Target                                  | Purpose                                                                                              |
-| ----------------------------- | --------------------------------------- | ---------------------------------------------------------------------------------------------------- |
-| `setup.sh`                    | —                                       | Installer: applies everything below to the profile                                                   |
-| `settings.json`               | `~/.claude/settings.json`               | Core settings: model, hooks, status line, plugins (deep-merged, not overwritten)                     |
-| `statusline-command.sh`       | `~/.claude/statusline-command.sh`       | 4-line status line: identity · session usage · quota bars w/ pace marker · location (details inside) |
-| `hooks/auto-session-title.py` | `~/.claude/hooks/auto-session-title.py` | `UserPromptSubmit` hook: auto `/rename`-style session title (`GR-1234-short-desc`)                   |
-| `CLAUDE.md`                   | `~/.claude/CLAUDE.md`                   | Global memory / behavior rules                                                                       |
-| `keybindings.json`            | `~/.claude/keybindings.json`            | `shift+enter` → newline                                                                              |
-| `mods/pr-tracker/`            | `~/.claude/mods/pr-tracker/`            | Hooks-module mod: side pane listing the session's PRs grouped by task — see [Mods](#mods)            |
-| `share-claude-config.sh`      | —                                       | Mirror the config into a 2nd account (`~/.claude2`) via symlinks — see [SHARING.md](SHARING.md)      |
+| File                              | Target                                  | Purpose                                                                                                     |
+| --------------------------------- | --------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| `setup.sh`                        | —                                       | Installer: applies everything below to the profile                                                          |
+| `settings.json`                   | `~/.claude/settings.json`               | Core settings: model, hooks, status line, plugins (deep-merged, not overwritten)                            |
+| `statusline-command.sh`           | `~/.claude/statusline-command.sh`       | 4-line status line: identity · session usage · quota bars w/ pace marker · location (details inside)        |
+| `hooks/auto-session-title.py`     | `~/.claude/hooks/auto-session-title.py` | `UserPromptSubmit` hook: auto `/rename`-style session title (`GR-1234-short-desc`)                          |
+| `CLAUDE.md`                       | `~/.claude/CLAUDE.md`                   | Global memory / behavior rules                                                                              |
+| `keybindings.json`                | `~/.claude/keybindings.json`            | `shift+enter` → newline                                                                                     |
+| `.claude-plugin/marketplace.json` | —                                       | Makes this repo a plugin marketplace (`ensarkovankaya`) — see [Plugins in this repo](#plugins-in-this-repo) |
+| `plugins/pr-tracker/`             | installed via `/plugin`                 | Side pane listing the session's PRs grouped by task                                                         |
+| `share-claude-config.sh`          | —                                       | Mirror the config into a 2nd account (`~/.claude2`) via symlinks — see [SHARING.md](SHARING.md)             |
 
 All paths inside `settings.json` use `~` / `$HOME`, so the files are portable as-is — no path editing needed.
 
@@ -63,7 +64,6 @@ What `setup.sh` does (details in the script itself):
   - Repo scalar values (e.g. `effortLevel`, `model`) win, so a re-run resets changes made via `/config` / `/model`. Arrays (e.g. `autoMode.soft_deny`) are replaced, not appended; object keys not in the repo (e.g. a local `autoMode.environment`) are kept.
   - Hook lists are merged per event: a repo hook replaces an existing entry with the same command (`$HOME`/`~` normalized), other hooks in that event are kept.
 - `statusline-command.sh` and `hooks/auto-session-title.py` copied + `chmod +x`; the `statusLine.command` and hook script paths in settings are rewritten to point into the active profile dir. `CLAUDE.md` and `keybindings.json` copied.
-- Each `mods/<name>/` copied to `<profile>/mods/<name>/` and appended to `env.CLAUDE_CODE_PLUGIN_DIRS` (existing entries kept, no duplicates).
 - Warns if `mdformat` or `python3 >= 3.8` is missing.
 
 It honors `CLAUDE_CONFIG_DIR`, so alternate profiles work too:
@@ -88,6 +88,7 @@ Then verify with `/plugin`. If anything is missing, install manually:
 /plugin marketplace add mksglu/context-mode
 /plugin marketplace add openai/codex-plugin-cc
 /plugin marketplace add kepano/obsidian-skills
+/plugin marketplace add ensarkovankaya/claude
 /plugin install context7@claude-plugins-official
 /plugin install skill-creator@claude-plugins-official
 /plugin install frontend-design@claude-plugins-official
@@ -97,6 +98,7 @@ Then verify with `/plugin`. If anything is missing, install manually:
 /plugin install context-mode@context-mode
 /plugin install codex@openai-codex
 /plugin install obsidian@obsidian-skills
+/plugin install pr-tracker@ensarkovankaya
 ```
 
 | Plugin            | Marketplace (repo)                         | Purpose                                                                         |
@@ -110,6 +112,7 @@ Then verify with `/plugin`. If anything is missing, install manually:
 | `context-mode`    | `context-mode` (mksglu/context-mode)       | Context-window protection: sandboxed exec + FTS5 knowledge base (`ctx_*` tools) |
 | `codex`           | `openai-codex` (openai/codex-plugin-cc)    | OpenAI Codex integration                                                        |
 | `obsidian`        | `obsidian-skills` (kepano/obsidian-skills) | Obsidian vault skills: CLI, markdown, Bases, Canvas                             |
+| `pr-tracker`      | `ensarkovankaya` (this repo)               | Side pane listing the session's PRs by task — see below                         |
 
 ### 5. Optional skills
 
@@ -181,22 +184,25 @@ ______________________________________________________________________
    - Skips non-user prompts (`-p`, SDK, loops) and harness-injected subagent/task messages (`<agent-message`, `<task-notification>`). State: `<profile>/auto-session-title/<session_id>.json`, next to the installed script with symlinks resolved — so a profile mirrored by `share-claude-config.sh` uses the source profile's state (delete the file to unlock). Disable with `AUTO_SESSION_TITLE_DISABLE=1`. Needs python3 >= 3.8; errors are swallowed.
 3. **SessionStart → `context-mode-cache-heal.mjs`** — auto-deployed by the context-mode plugin on install: it places the script under `~/.claude/hooks/` and adds the `SessionStart` entry to `settings.json` itself. Intentionally not part of the repo's `settings.json` — do not hand-copy or pre-configure it.
 
-### Mods
+### Plugins in this repo
 
-Hooks-module plugins loaded from disk via `env.CLAUDE_CODE_PLUGIN_DIRS`; an interactive session hot-reloads them on save.
+This repo is also a plugin marketplace (`.claude-plugin/marketplace.json`, name `ensarkovankaya`); each plugin lives under `plugins/<name>/`. `settings.json` declares the marketplace and enables its plugins, so `setup.sh` + a restart installs them. To install one on its own, at the Claude Code prompt:
 
-**`pr-tracker`** — side pane (`/prs`) listing the PRs opened in the session (subagents included), grouped by the task key (`ABC-123`) in the PR title or branch, with live state, review, approvers and CI from `gh pr view` (polled every 2 min). Opens in summary mode; `[detay]` toggles the detail view. A click on a PR or task opens it in the browser.
+```
+/plugin install pr-tracker --marketplace ensarkovankaya/claude
+```
+
+or from a shell: `claude plugin install pr-tracker --marketplace ensarkovankaya/claude`.
+
+**`pr-tracker`** — side pane (`/prs`) listing the PRs opened in the session (subagents included), grouped by the task key (`ABC-123`) in the PR title or branch, with live state, review, approvers and CI from `gh pr view` (polled every 2 min). Opens in summary mode; `[detail]` toggles the detail view. A click on a PR or task opens it in the browser.
 
 - Needs `gh` (authenticated) and `node`.
-- Option `jiraBaseUrl` (e.g. `https://<site>.atlassian.net/browse/`): makes task keys clickable. Empty by default; set it locally, not in this repo:
-
-  ```json
-  "pluginConfigs": { "pr-tracker@inline": { "options": { "jiraBaseUrl": "https://<site>.atlassian.net/browse/" } } }
-  ```
-
-- Options `extraPrCommand` (regex for a non-`gh` command that opens PRs, e.g. your own script) and `ignoredPendingChecks` (regex for check names that stay pending forever and shouldn't hold the CI badge). Both empty by default.
+- Options (set at install, or later in `/plugin` → pr-tracker → configure), all empty by default:
+  - `jiraBaseUrl` (e.g. `https://<site>.atlassian.net/browse/`): makes task keys clickable.
+  - `extraPrCommand`: regex for a non-`gh` command that opens PRs (e.g. your own script).
+  - `ignoredPendingChecks`: regex for check names that stay pending forever and shouldn't hold the CI badge.
 - Commands: `/prs [add <url…> | rm <repo#n> | scan | refresh | compact | close | clear]`.
-- Test: `claude plugin test mods/pr-tracker`.
+- Developing: `claude --plugin-dir plugins/pr-tracker` loads the checkout (hot-reloads on save); test with `claude plugin test plugins/pr-tracker`.
 
 ### Global memory (`CLAUDE.md`)
 

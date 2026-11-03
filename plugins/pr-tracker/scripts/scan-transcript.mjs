@@ -1,6 +1,6 @@
 // Usage: node scan-transcript.mjs <transcript.jsonl> <patterns-json>
-// Ana transcript + <id>/subagents/*.jsonl içinde PR açan Bash komutlarının sonuçlarındaki PR URL'lerini çıkarır.
-// patterns-json: [[regexSource, ...], ...] — bir grup içindeki tüm regex'ler eşleşirse komut PR açan sayılır.
+// Extracts PR URLs from the results of PR-opening Bash commands in the main transcript and <id>/subagents/*.jsonl.
+// patterns-json: [[regexSource, ...], ...] — a command opens a PR when every regex of one group matches.
 import { createReadStream, existsSync, readdirSync } from 'node:fs'
 import { basename, dirname, join } from 'node:path'
 import { createInterface } from 'node:readline'

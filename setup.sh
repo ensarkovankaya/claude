@@ -22,11 +22,7 @@
 #      hooks/auto-session-title.py -> copied + chmod +x
 #   3. CLAUDE.md             -> copied
 #   4. keybindings.json      -> copied
-#   5. mods/<name>/          -> copied to <profile>/mods/<name>/ and each folder
-#                              appended to env.CLAUDE_CODE_PLUGIN_DIRS in
-#                              <profile>/settings.json (other entries kept).
-#                              Per-mod options (pluginConfigs) are left alone.
-#   6. Requires jq; warns if mdformat / python3 >= 3.8 are missing.
+#   5. Requires jq; warns if mdformat / python3 >= 3.8 are missing.
 
 set -euo pipefail
 
@@ -36,7 +32,7 @@ CLAUDE_DIR="${CLAUDE_DIR/#\~/$HOME}"
 
 command -v jq >/dev/null 2>&1 || { echo "ERROR: jq is required (brew install jq)"; exit 1; }
 
-for item in settings.json statusline-command.sh hooks mods CLAUDE.md keybindings.json; do
+for item in settings.json statusline-command.sh hooks CLAUDE.md keybindings.json; do
   if [ -L "$CLAUDE_DIR/$item" ]; then
     echo "ERROR: $CLAUDE_DIR/$item is a symlink -> $(readlink "$CLAUDE_DIR/$item")"
     echo "       This profile is shared (share-claude-config.sh); run setup.sh against the source profile."
@@ -98,24 +94,7 @@ echo "copied   CLAUDE.md"
 cp "$REPO_DIR/keybindings.json" "$CLAUDE_DIR/keybindings.json"
 echo "copied   keybindings.json"
 
-# 5. mods (hooks-module plugins), loaded via CLAUDE_CODE_PLUGIN_DIRS
-for src in "$REPO_DIR"/mods/*/; do
-  [ -f "$src/.claude-plugin/plugin.json" ] || continue
-  name="$(basename "$src")"
-  dest="$CLAUDE_DIR/mods/$name"
-  mkdir -p "$dest"
-  cp -R "$src". "$dest/"
-  jq --arg dir "$dest" --arg home "$HOME" '
-    (.env.CLAUDE_CODE_PLUGIN_DIRS // "") as $cur
-    | ($cur | split(":") | map(select(. != ""))) as $parts
-    | if any($parts[]; gsub("^~"; $home) == $dir) then .
-      else .env.CLAUDE_CODE_PLUGIN_DIRS = ($parts + [$dir] | join(":")) end
-  ' "$TARGET" > "$TARGET.tmp"
-  mv -f "$TARGET.tmp" "$TARGET"
-  echo "copied   mods/$name (CLAUDE_CODE_PLUGIN_DIRS)"
-done
-
-# 6. dependency warnings (non-fatal — both hooks are no-ops without them)
+# 5. dependency warnings (non-fatal — both hooks are no-ops without them)
 [ -x "$HOME/.local/bin/mdformat" ] || \
   echo "WARN: ~/.local/bin/mdformat not found — md auto-format hook will be a no-op (uv tool install mdformat)"
 python3 -c 'import sys; sys.exit(sys.version_info < (3, 8))' 2>/dev/null || \
