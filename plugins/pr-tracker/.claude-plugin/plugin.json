@@ -1,0 +1,29 @@
+{
+  "name": "pr-tracker",
+  "version": "0.1.0",
+  "description": "Side pane listing the PRs opened in the session (subagents included), grouped by task key, with live state, review and CI",
+  "types": "./types/index.d.ts",
+  "userConfig": {
+    "jiraBaseUrl": {
+      "type": "string",
+      "title": "Jira browse URL",
+      "description": "Prefix for task keys, e.g. https://<site>.atlassian.net/browse/. Empty: task keys are not links.",
+      "default": ""
+    },
+    "extraPrCommand": {
+      "type": "string",
+      "title": "Extra PR-opening command (regex)",
+      "description": "Regex matching a command other than gh pr create / gh api that opens PRs, e.g. your own script. Empty: gh only.",
+      "default": ""
+    },
+    "ignoredPendingChecks": {
+      "type": "string",
+      "title": "Ignored pending checks (regex)",
+      "description": "Regex for check names that stay pending forever and should not hold the CI badge. Empty: none.",
+      "default": ""
+    }
+  },
+  "author": {
+    "name": "ensarkovankaya"
+  }
+}

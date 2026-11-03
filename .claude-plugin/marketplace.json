@@ -1,0 +1,15 @@
+{
+  "name": "ensarkovankaya",
+  "owner": {
+    "name": "ensarkovankaya"
+  },
+  "description": "Plugins from ensarkovankaya/claude (personal Claude Code setup)",
+  "plugins": [
+    {
+      "name": "pr-tracker",
+      "source": "./plugins/pr-tracker",
+      "description": "Side pane listing the PRs opened in the session, grouped by task key, with live state, review and CI",
+      "version": "0.1.0"
+    }
+  ]
+}
