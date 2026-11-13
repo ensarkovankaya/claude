@@ -12,6 +12,7 @@ Scope: personal setup only (`~/.claude`). Project-level config lives in each rep
 | `settings.json`                   | `~/.claude/settings.json`               | Core settings: model, hooks, status line, plugins (deep-merged, not overwritten)                            |
 | `statusline-command.sh`           | `~/.claude/statusline-command.sh`       | 4-line status line: identity · session usage · quota bars w/ pace marker · location (details inside)        |
 | `hooks/auto-session-title.py`     | `~/.claude/hooks/auto-session-title.py` | `UserPromptSubmit` hook: auto `/rename`-style session title (`GR-1234-short-desc`)                          |
+| `hooks/block-cpu-burn.py`         | `~/.claude/hooks/block-cpu-burn.py`     | `PreToolUse(Bash)` hook: blocks artificial CPU load (busy-loops, `yes >/dev/null`, `stress`) in any mode    |
 | `CLAUDE.md`                       | `~/.claude/CLAUDE.md`                   | Global memory / behavior rules                                                                              |
 | `keybindings.json`                | `~/.claude/keybindings.json`            | `shift+enter` → newline                                                                                     |
 | `.claude-plugin/marketplace.json` | —                                       | Makes this repo a plugin marketplace (`ensarkovankaya`) — see [Plugins in this repo](#plugins-in-this-repo) |
@@ -39,7 +40,7 @@ brew install jq
 # Must end up at ~/.local/bin/mdformat (uv and pipx both install there).
 uv tool install mdformat                   # or: pipx install mdformat
 
-# python3 >= 3.8 — runs the auto session title hook (macOS system python 3.9 is fine)
+# python3 >= 3.8 — runs the auto session title + CPU burn guard hooks (macOS system python 3.9 is fine)
 brew install python
 ```
 
@@ -63,7 +64,7 @@ What `setup.sh` does (details in the script itself):
 - **`settings.json` is deep-merged** into the existing file via `jq` (backup taken first, newest 5 kept) — fields not defined in the repo file, like the `SessionStart` hook that context-mode auto-adds, are preserved. Created from scratch if missing; aborts if the existing file is not a JSON object.
   - Repo scalar values (e.g. `effortLevel`, `model`) win, so a re-run resets changes made via `/config` / `/model`. Arrays (e.g. `autoMode.soft_deny`) are replaced, not appended; object keys not in the repo (e.g. a local `autoMode.environment`) are kept.
   - Hook lists are merged per event: a repo hook replaces an existing entry with the same command (`$HOME`/`~` normalized), other hooks in that event are kept.
-- `statusline-command.sh` and `hooks/auto-session-title.py` copied + `chmod +x`; the `statusLine.command` and hook script paths in settings are rewritten to point into the active profile dir. `CLAUDE.md` and `keybindings.json` copied.
+- `statusline-command.sh`, `hooks/auto-session-title.py` and `hooks/block-cpu-burn.py` copied + `chmod +x`; the `statusLine.command` and hook script paths in settings are rewritten to point into the active profile dir. `CLAUDE.md` and `keybindings.json` copied.
 - Warns if `mdformat` or `python3 >= 3.8` is missing.
 
 It honors `CLAUDE_CONFIG_DIR`, so alternate profiles work too:
@@ -142,6 +143,7 @@ Not part of this setup; enable where needed:
 4. [ ] Ask Claude to write a test `.md` file — the mdformat hook should reformat it
 5. [ ] `shift+enter` inserts a newline in the chat input
 6. [ ] Send a prompt mentioning `GR-1234` — the session title becomes `GR-1234`, then gains a short description from the next prompt on
+7. [ ] `python3 hooks/test_block_cpu_burn.py` passes; asking Claude to run `timeout 2 bash -c 'while :; do :; done'` is blocked by the hook
 
 ______________________________________________________________________
 
@@ -182,7 +184,12 @@ ______________________________________________________________________
    - **Description:** branch part after the key > Claude's own `ai-title` from the transcript, slugified (no extra model call; it exists from the 2nd prompt on).
    - **Manual `/rename` wins:** if the transcript's last `custom-title` is neither what the hook last set nor what it would set now, that session is locked and never touched again. If the transcript can't be read, the hook does nothing (fail-closed).
    - Skips non-user prompts (`-p`, SDK, loops) and harness-injected subagent/task messages (`<agent-message`, `<task-notification>`). State: `<profile>/auto-session-title/<session_id>.json`, next to the installed script with symlinks resolved — so a profile mirrored by `share-claude-config.sh` uses the source profile's state (delete the file to unlock). Disable with `AUTO_SESSION_TITLE_DISABLE=1`. Needs python3 >= 3.8; errors are swallowed.
-3. **SessionStart → `context-mode-cache-heal.mjs`** — auto-deployed by the context-mode plugin on install: it places the script under `~/.claude/hooks/` and adds the `SessionStart` entry to `settings.json` itself. Intentionally not part of the repo's `settings.json` — do not hand-copy or pre-configure it.
+3. **PreToolUse (Bash) → `block-cpu-burn.py`** — declared in `settings.json`. Blocks (exit 2, reason + alternatives sent to Claude) Bash commands that burn CPU on purpose, regardless of permission mode (auto/bypass, subagents included — the auto mode classifier let one through: on 2026-11-13 a subagent left 48 orphaned busy-loops at ~960% CPU for 1.5h while trying to reproduce a flaky race test).
+   - **Blocked:** infinite loops with a no-op body (`while :; do :; done`, `while true; do true; done`, `until false; do :; done`, `for ((;;))`), `yes` not feeding a pipe (`yes >/dev/null &`), `stress`/`stress-ng`, `dd if=/dev/zero of=/dev/null` without `count=`, `cat /dev/zero > /dev/null`, `sha256sum /dev/zero`, `python -c 'while True: pass'`-style one-liners. Also inside `bash -c '…'`, `eval`, `$(…)`, backticks and `bash <<EOF` bodies.
+   - **Allowed:** polling loops that do work/sleep (`while true; do curl …; sleep 5; done`, `until pg_isready; do sleep 1; done`), `yes | installer`, `dd … count=N`, and the patterns as plain text — a small shell lexer skips quoted strings, comments and non-shell heredocs (`grep 'while :; do :; done'`, commit/PR bodies).
+   - `CLAUDE.md` states the same rule as an instruction (System load section), so Claude avoids these commands up front instead of hitting the hook.
+   - Fail-open: missing script/python3, bad input or any error → exit 0. Tests: `python3 hooks/test_block_cpu_burn.py` (commands are only fed as JSON, never run).
+4. **SessionStart → `context-mode-cache-heal.mjs`** — auto-deployed by the context-mode plugin on install: it places the script under `~/.claude/hooks/` and adds the `SessionStart` entry to `settings.json` itself. Intentionally not part of the repo's `settings.json` — do not hand-copy or pre-configure it.
 
 ### Plugins in this repo
 

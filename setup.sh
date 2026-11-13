@@ -19,7 +19,7 @@
 #                              Script paths are rewritten into <profile>.
 #                              A backup is taken first (newest 5 kept).
 #   2. statusline-command.sh -> copied + chmod +x
-#      hooks/auto-session-title.py -> copied + chmod +x
+#      hooks/auto-session-title.py, hooks/block-cpu-burn.py -> copied + chmod +x
 #   3. CLAUDE.md             -> copied
 #   4. keybindings.json      -> copied
 #   5. Requires jq; warns if mdformat / python3 >= 3.8 are missing.
@@ -77,7 +77,7 @@ jq -n --argjson old "$OLD_JSON" --slurpfile new "$REPO_DIR/settings.json" \
 mv -f "$TARGET.tmp" "$TARGET"
 echo "$VERB"
 
-# 2. status line script + auto session title hook
+# 2. status line script + hook scripts
 cp "$REPO_DIR/statusline-command.sh" "$CLAUDE_DIR/statusline-command.sh"
 chmod +x "$CLAUDE_DIR/statusline-command.sh"
 echo "copied   statusline-command.sh"
@@ -85,6 +85,10 @@ echo "copied   statusline-command.sh"
 cp "$REPO_DIR/hooks/auto-session-title.py" "$CLAUDE_DIR/hooks/auto-session-title.py"
 chmod +x "$CLAUDE_DIR/hooks/auto-session-title.py"
 echo "copied   hooks/auto-session-title.py"
+
+cp "$REPO_DIR/hooks/block-cpu-burn.py" "$CLAUDE_DIR/hooks/block-cpu-burn.py"
+chmod +x "$CLAUDE_DIR/hooks/block-cpu-burn.py"
+echo "copied   hooks/block-cpu-burn.py"
 
 # 3. global memory
 cp "$REPO_DIR/CLAUDE.md" "$CLAUDE_DIR/CLAUDE.md"
@@ -94,10 +98,10 @@ echo "copied   CLAUDE.md"
 cp "$REPO_DIR/keybindings.json" "$CLAUDE_DIR/keybindings.json"
 echo "copied   keybindings.json"
 
-# 5. dependency warnings (non-fatal — both hooks are no-ops without them)
+# 5. dependency warnings (non-fatal — the hooks are no-ops without them)
 [ -x "$HOME/.local/bin/mdformat" ] || \
   echo "WARN: ~/.local/bin/mdformat not found — md auto-format hook will be a no-op (uv tool install mdformat)"
 python3 -c 'import sys; sys.exit(sys.version_info < (3, 8))' 2>/dev/null || \
-  echo "WARN: python3 >= 3.8 not found — auto session title hook will be a no-op (brew install python)"
+  echo "WARN: python3 >= 3.8 not found — auto session title + CPU burn guard hooks will be no-ops (brew install python)"
 
 echo "done -> $CLAUDE_DIR (restart claude to apply)"
