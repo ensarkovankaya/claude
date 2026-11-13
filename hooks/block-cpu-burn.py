@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
-"""PreToolUse(Bash) hook: makineye yapay CPU yükü bindiren komutları bloklar (exit 2).
+"""PreToolUse(Bash) hook: blocks commands that put artificial CPU load on the machine (exit 2).
 
-Bloklanan: gövdesi no-op olan sonsuz döngüler (`while :; do :; done`, `until false; ...`,
-`for ((;;))`), boşa akan `yes` (`yes > /dev/null`, `yes &`), `stress`/`stress-ng`,
-count'suz `dd if=/dev/zero of=/dev/null`, `cat /dev/zero > /dev/null`, `sha256sum /dev/zero`,
-`python -c 'while True: pass'` tarzı tek satırlıklar.
-Komut küçük bir shell lexer'ından geçer: tırnak içi metin, yorum ve shell olmayan heredoc'lar
-kod sayılmaz (grep/echo/commit mesajı false positive vermesin); `bash -c '...'`, `eval`,
-`$(...)`, backtick ve `bash <<EOF` gövdeleri ise kod olarak tekrar taranır.
-İzin modundan bağımsız çalışır (auto/bypass, subagent'lar dahil). Her hatada exit 0 (fail-open):
-hook hiçbir durumda Bash'i kilitlememeli.
+Blocked: infinite loops with a no-op body (`while :; do :; done`, `until false; ...`,
+`for ((;;))`), `yes` not feeding a pipe (`yes > /dev/null`, `yes &`), `stress`/`stress-ng`,
+`dd if=/dev/zero of=/dev/null` without count, `cat /dev/zero > /dev/null`, `sha256sum /dev/zero`,
+`python -c 'while True: pass'`-style one-liners.
+The command goes through a small shell lexer: quoted text, comments and non-shell heredocs are
+not code (so grep/echo/commit messages don't false-positive); `bash -c '...'`, `eval`,
+`$(...)`, backticks and `bash <<EOF` bodies are re-scanned as code.
+Applies regardless of permission mode (auto/bypass, subagents included). Any error -> exit 0
+(fail-open): the hook must never lock up Bash.
 """
 from __future__ import annotations
 
@@ -23,13 +23,13 @@ LANG_RE = re.compile(r"^(?:python[\d.]*|pypy3?|node|perl|ruby)$")
 KEYWORDS = {"!", "{", "}", "if", "then", "elif", "else", "do", "while", "until", "time",
             "nohup", "exec", "command", "builtin", "setsid", "caffeinate"}
 DEVS = {"/dev/zero", "/dev/urandom", "/dev/random"}
-# boru ile beslenmiyorsa sonsuz okuyan/yazan komutlar
+# read/write forever unless their output feeds a pipe
 READERS = {"cat", "pv", "tr", "base64", "gzip", "bzip2", "xz", "zstd"}
-# borudan bağımsız: /dev/zero'yu sonuna kadar okumaya çalışır
+# pipe or not: try to read /dev/zero to the end
 DIGESTS = {"md5", "md5sum", "sha1sum", "sha224sum", "sha256sum", "sha384sum", "sha512sum",
            "shasum", "b2sum", "cksum", "wc"}
 
-# komut pozisyonundaki while/until: koşul ; do gövde done (lookahead: iç içe döngüler de taransın)
+# while/until in command position: cond ; do body done (lookahead so nested loops are scanned too)
 LOOP_RE = re.compile(
     r"(?<![^\s;&|(){}`])(?=((while|until)\s+([^;\n]*?)\s*[;\n]\s*do(?=[\s;])((?:(?!\bdone\b).)*)\bdone\b))",
     re.S)
@@ -50,15 +50,15 @@ SEP_RE = re.compile(r"(\|\||&&|\|&|;;|\$\(|\x01|[|;&\n()`])")
 SAFE_WORD = re.compile(r"[\w./=:+@%,-]+")
 
 MESSAGE = """BLOCKED by block-cpu-burn hook: {reason}
-Yapay CPU yükü bindirmek yasak (busy-loop, boşa akan yes, stress/stress-ng, /dev/zero okuma...).
-Komut çalıştırılmadı. Önceki olayda bu tür bir komut orphan kalıp saatlerce makineyi kilitledi.
-- Race / flaky test yeniden üretmek için: go test -race -count=N -cpu=1,2,4 -run <Test> (veya GOMAXPROCS=N).
-- Arka plan süreci başlatırsan trap ile temizle: trap 'kill $(jobs -p) 2>/dev/null' EXIT; orphan bırakma.
-Kuralı farklı yazımla/script dosyasıyla aşmaya çalışma; gerçekten gerekiyorsa kullanıcıya sor."""
+Artificial CPU load is forbidden (busy-loops, yes into nothing, stress/stress-ng, reading /dev/zero...).
+The command was NOT run. In a past incident such a command was orphaned and pegged the machine for hours.
+- To reproduce a race / flaky test: go test -race -count=N -cpu=1,2,4 -run <Test> (or GOMAXPROCS=N).
+- If you start background processes, clean them up with trap: trap 'kill $(jobs -p) 2>/dev/null' EXIT; never leave orphans.
+Do not try to bypass this rule (different spelling, script file, ...); if it is really needed, ask the user."""
 
 
 def split_commands(skel: str) -> list[tuple[list[str], str, str]]:
-    """Skeleton'ı basit komutlara böler: (kelimeler, önceki ayraç, sonraki ayraç)."""
+    """Split the skeleton into simple commands: (words, previous separator, next separator)."""
     s = re.sub(r"\d*[<>]&(?:\d+|-)", " ", skel)          # 2>&1, >&2, <&-
     s = re.sub(r"&>>?|>&|>\|", " > ", s)                  # &>file, >&file, >|file
     s = re.sub(r"[<>]\(", "\x01", s)                      # <(..) / >(..) process substitution
@@ -85,7 +85,7 @@ def strip_wrappers(words: list[str]) -> list[str]:
                 takes_arg = w != "env" and words[i] in ("-u", "-g", "-C", "-n", "-s", "-k")
                 i += 2 if takes_arg else 1
             if w in ("timeout", "gtimeout"):
-                i += 1  # süre
+                i += 1  # duration
         else:
             break
     return words[i:]
@@ -96,20 +96,20 @@ def argv0(words: list[str]) -> str:
 
 
 def current_words(prefix: str) -> list[str]:
-    """Prefix'in son basit komutunun (wrapper'sız) kelimeleri."""
+    """Words (wrappers stripped) of the last simple command in prefix."""
     cmds = split_commands(prefix)
     return strip_wrappers(cmds[-1][0]) if cmds else []
 
 
 class Lexer:
-    """Minimal shell lexer: kodu 'skeleton'a indirger, tırnak içini Q yapar,
-    shell olarak çalışacak gömülü kodu (bash -c, eval, heredoc, backtick) ayrıca toplar."""
+    """Minimal shell lexer: reduces code to a 'skeleton' (quoted text -> Q) and separately
+    collects embedded code that will run as shell (bash -c, eval, heredoc, backtick)."""
 
     def __init__(self, s: str):
         self.s, self.i, self.n = s, 0, len(s)
         self.heredocs: list[tuple[str, bool, list[str]]] = []
-        self.code: list[str] = []   # tekrar shell olarak taranacak parçalar
-        self.lang: list[str] = []   # python/node/perl/ruby kodu
+        self.code: list[str] = []   # fragments to re-scan as shell
+        self.lang: list[str] = []   # python/node/perl/ruby code
 
     def parse(self, stop: str | None = None) -> str:
         s, out, depth = self.s, [], 0
@@ -185,7 +185,7 @@ class Lexer:
         self.i = j + 1
 
     def word(self, out: list[str], text: str) -> None:
-        """Tırnaklı metin: kod değil; ama bash -c / eval / python -c argümanıysa kod olarak sakla."""
+        """Quoted text is not code, unless it is the argument of bash -c / eval / python -c."""
         words = current_words("".join(out))
         a0 = argv0(words)
         last = words[-1] if len(words) > 1 else ""
@@ -236,10 +236,10 @@ def check_skeleton(skel: str) -> str | None:
         kw, cond, body = m.group(2), m.group(3).strip(), m.group(4)
         infinite = WHILE_TRUE.match(cond) if kw == "while" else UNTIL_FALSE.match(cond)
         if infinite and all(NOOP.match(p.strip()) for p in re.split(r"[;\n]", body)):
-            return "gövdesi boş sonsuz döngü (busy-loop): " + " ".join(m.group(1).split())
+            return "infinite loop with empty body (busy-loop): " + " ".join(m.group(1).split())
     for m in FOR_RE.finditer(skel):
         if all(NOOP.match(p.strip()) for p in re.split(r"[;\n]", m.group(1))):
-            return "gövdesi boş sonsuz for döngüsü (busy-loop)"
+            return "infinite for loop with empty body (busy-loop)"
 
     for words, prev, nxt in split_commands(skel):
         words = strip_wrappers(words)
@@ -259,22 +259,22 @@ def check_skeleton(skel: str) -> str | None:
                 k += 1
         a0 = argv0(argv)
         if not a0 or (len(words) == 1 and nxt == ")" and prev != "$("):
-            continue  # boş ya da `case` deseni (`yes)`)
+            continue  # empty, or a `case` pattern (`yes)`)
         piped = nxt in ("|", "|&") or prev == "\x01"
         reads_dev = stdin in DEVS or any(a in DEVS for a in argv[1:])
         if a0 == "yes" and not piped:
-            return "boşa akan `yes` (pipe'a bağlı değil)"
+            return "`yes` not feeding a pipe"
         if a0 in ("stress", "stress-ng"):
-            return "`%s` yük üretici" % a0
+            return "`%s` load generator" % a0
         if a0 == "dd" and not any(a.startswith("count=") for a in argv):
             src = next((a[3:] for a in argv if a.startswith("if=")), stdin)
             dst = next((a[3:] for a in argv if a.startswith("of=")), stdout)
             if src in DEVS and (dst == "/dev/null" or (dst is None and not piped)):
-                return "count'suz `dd if=%s` (sonsuz kopyalama)" % src
+                return "`dd if=%s` without count= (endless copy)" % src
         if a0 in READERS and reads_dev and not piped:
-            return "`%s` ile %s sonsuz okuma" % (a0, "/dev/zero|urandom")
+            return "`%s` reading %s endlessly" % (a0, "/dev/zero|urandom")
         if a0 in DIGESTS and reads_dev:
-            return "`%s` ile sonsuz cihaz okuma" % a0
+            return "`%s` reading a device endlessly" % a0
     return None
 
 
@@ -292,7 +292,7 @@ def analyze(cmd: str, depth: int = 0) -> str | None:
             return reason
     for code in lx.lang:
         if LANG_BUSY.search(code):
-            return "tek satırlık betikte boş sonsuz döngü"
+            return "empty infinite loop in a one-liner script"
     return None
 
 

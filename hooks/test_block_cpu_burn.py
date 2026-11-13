@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""block-cpu-burn.py tablo testleri. Çalıştır: python3 hooks/test_block_cpu_burn.py
+"""Table tests for block-cpu-burn.py. Run: python3 hooks/test_block_cpu_burn.py
 
-Komutlar ASLA çalıştırılmaz; sadece hook'a JSON olarak verilir.
+Commands are NEVER executed; they are only fed to the hook as JSON.
 """
 import importlib.util
 import json
@@ -30,7 +30,7 @@ BLOCKED = [
     "for ((;;)); do :; done",
     "(while true; do true; done) &",
     "while true; do sleep 1; while :; do :; done; done",
-    # 2026-11-13 olayı
+    # 2026-11-13 incident
     "for i in $(seq 1 24); do (while :; do :; done) & pids=\"$pids $!\"; done; go test -run TestRace ./...; kill $pids",
     "timeout 2 bash -c 'while :; do :; done'",
     "bash -c \"while true; do :; done\" &",
